@@ -398,6 +398,14 @@ loot, VP, drops and the clear item; the port shows them in a window.
   4 area search, 6 started when an area pop-up first closes (exact
   meaning unclear; not reconstructed), 7-11 N-Gage Arena (online),
   5 never started.
+- Opened paths: the area-boss win (0x10001b1c) appends (0x53, area) to
+  the queue at game+0x144 (six 8-byte pairs, 0xffff ends) for every
+  area it unlocks. After the results (0x1000b200) a non-empty queue
+  requests trigger009.txt ("The path to XXX has been opened!").
+  Opening it (0x1005b0f0 -> FUN_1005aa2c) sets the "XXX" word to the
+  head's area.dat name (FUN_10063e3c) and drops the head; closing any
+  pop-up (0x1005aaa0) shows trigger 9 again while areas are queued.
+  Port: pk_help_queue_area / pk_help_show_opened_area (pk_help.c).
 
 ## Ending (0x10038208) and treasures
 

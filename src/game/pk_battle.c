@@ -661,6 +661,7 @@ static void boss_beaten(pk_game *g)
         }
         if (need > 0 && need == have && g->world.areas[k][36] == 0) {
             g->world.areas[k][36] = 1;
+            pk_help_queue_area(k); /* game+0x144: (0x53, k) */
             PK_DEBUG("area %d unlocked", k);
         }
     }
@@ -1770,6 +1771,9 @@ void pk_mode_result(pk_game *g)
         if (g->curtain == PK_CURTAIN_HELD) {
             pk_objects_clear(g);
             pk_game_set_mode(g, g->ending_pending ? PK_MODE_ENDING : PK_MODE_FIELD);
+            if (!g->ending_pending) {
+                pk_help_show_opened_area(g); /* 0x1000b200: trigger 9 */
+            }
         }
         return;
     }

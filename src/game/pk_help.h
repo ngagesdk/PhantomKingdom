@@ -8,6 +8,11 @@ bool pk_help_active(void);
 void pk_help_reset_popups(void);
 /* game+0x574: the word a pop-up shows in place of "XXX" */
 void pk_help_set_word(const Uint16 *w);
+/* game+0x144: areas whose path was just opened by an area boss (pairs
+ * 0x53, area; 0xffff ends). Each one gets trigger009.txt ("The path to
+ * XXX has been opened!") with the area's name; see pk_help.c. */
+void pk_help_queue_area(int area);
+void pk_help_show_opened_area(pk_game *g);
 /* A detail window with the given UTF-8 lines (port: the original's
  * detail screens 0x1003c224 / 0x1005fc0c drawn as text). */
 void pk_help_show_lines(const char *const *lines, int n);

@@ -16,6 +16,7 @@
 #include "core/pk_app.h"
 #include "core/pk_fs.h"
 #include "core/pk_log.h"
+#include "game/pk_data.h"
 #include "game/pk_world.h"
 #include "gfx/pk_font.h"
 #include "gfx/pk_gfx.h"
@@ -285,6 +286,37 @@ void pk_help(pk_game *g, int kind, int id)
 
 bool pk_help_active(void) { return s_help.active; }
 
+/* game+0x144: six pairs (0x53, area) of newly opened areas, written by
+ * the area-boss win (battle controller state 4, 0x10001b1c). After the
+ * results (0x1000b200) a non-empty queue requests trigger 9; opening it
+ * (0x1005b0f0 -> FUN_1005aa2c) puts the head's area.dat name in the
+ * "XXX" word (FUN_10063e3c) and drops the head; closing a pop-up
+ * (0x1005aaa0) shows trigger 9 again while areas are left. */
+#define OPENED_MAX 6
+static int s_opened[OPENED_MAX];
+static int s_opened_count;
+
+void pk_help_queue_area(int area)
+{
+    if (s_opened_count < OPENED_MAX) {
+        s_opened[s_opened_count++] = area;
+    }
+}
+
+void pk_help_show_opened_area(pk_game *g)
+{
+    int i;
+    if (s_help.active || s_opened_count == 0) {
+        return;
+    }
+    pk_help_set_word(pk_data_text(PK_TBL_AREA, s_opened[0] * 5));
+    for (i = 1; i < s_opened_count; i++) {
+        s_opened[i - 1] = s_opened[i];
+    }
+    s_opened_count--;
+    pk_help(g, 1, 9);
+}
+
 void pk_help_show_lines(const char *const *lines, int n)
 {
     int i;
@@ -365,6 +397,7 @@ void pk_help_input(pk_game *g)
         s_help.page++;
         if (page_start(s_help.page, &n) < 0 || n == 0) {
             s_help.active = false;
+            pk_help_show_opened_area(g); /* 0x1005aaa0: the next opened area */
         }
         s_help.delay = 3;
     }

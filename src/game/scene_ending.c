@@ -20,6 +20,7 @@
 #include "core/pk_log.h"
 #include "core/pk_text.h"
 #include "game/pk_data.h"
+#include "game/pk_help.h"
 #include "game/pk_scenes.h"
 #include "game/pk_world.h"
 #include "gfx/pk_font.h"
@@ -174,6 +175,7 @@ static void roll_finish(pk_game *g)
     PK_DEBUG("ending seen: cleared %d time(s)", g->world.h_43c);
     pk_world_save(g);
     pk_game_set_mode(g, PK_MODE_FIELD);
+    pk_help_show_opened_area(g); /* areas opened by the last boss, if any */
 }
 
 void pk_mode_ending(pk_game *g)
