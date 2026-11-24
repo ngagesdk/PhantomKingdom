@@ -165,7 +165,7 @@ add_custom_command(TARGET PhantomLink POST_BUILD
 include(GNUInstallDirs)
 install(TARGETS PhantomLink RUNTIME DESTINATION .)
 install(DIRECTORY assets/ DESTINATION assets)
-install(FILES README.md LICENSE docs/THIRD_PARTY.md DESTINATION .)
+install(FILES README.md LICENSE.md docs/THIRD_PARTY.md DESTINATION .)
 
 if(PK_BUILD_TESTS)
     enable_testing()
