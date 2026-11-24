@@ -4,7 +4,10 @@
 
 #include <stdbool.h>
 
+#ifndef PK_GAME_TYPEDEF
+#define PK_GAME_TYPEDEF
 typedef struct pk_game pk_game;
+#endif
 
 /* The pause menu (FUN_1006e17c): resume, volume, save and quit to the
  * title on the kingdom screen; a paused plate elsewhere. */

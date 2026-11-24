@@ -13,7 +13,10 @@
  * Objects flagged dead are deleted after the pass (FUN_1006d5f4).
  * Offsets in comments refer to the original object. */
 
+#ifndef PK_GAME_TYPEDEF
+#define PK_GAME_TYPEDEF
 typedef struct pk_game pk_game;
+#endif
 typedef struct pk_object pk_object;
 typedef void (*pk_object_fn)(pk_object *self, pk_game *g);
 

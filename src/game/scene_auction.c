@@ -581,7 +581,11 @@ static void num_draw(pk_game *g)
     auc_spr(g, 0x17, 0x1008d3e4u, N.focus == 2 ? 0x3d : 0x3c, 0x18, 0x60);
     pk_game_mestext(g, N.label, 0x18 + 0x42, 0x50 + 0xc, 0, PK_ALIGN_CENTER, 1, PK_FONT_DENSE);
     pk_game_mestext(g, 8, 0x18 + 0x42, 0x60 + 0xc, 0, PK_ALIGN_CENTER, 1, PK_FONT_DENSE);
-    SDL_snprintf(buf, sizeof(buf), N.val ? "%u" : "", (unsigned)N.val);
+    if (N.val) {
+        SDL_snprintf(buf, sizeof(buf), "%u", (unsigned)N.val);
+    } else {
+        buf[0] = '\0';
+    }
     pk_drawq_text_utf8(&g->drawq, buf, 0x3c + 0x3c, 0x32 + 0xd, 0, PK_ALIGN_RIGHT, 1, PK_FONT_DENSE);
     if (N.focus == 0 && (SDL_GetTicks() / 400) % 2 == 0) {
         pk_drawq_text_utf8(&g->drawq, "|", 0x3c + 0x3d, 0x32 + 0xd, 0, PK_ALIGN_LEFT, 1, PK_FONT_DENSE);

@@ -56,7 +56,10 @@ typedef struct pk_world
     Uint8 help_seen[58]; /* +0x2c4: help pop-ups already shown */
 } pk_world;
 
+#ifndef PK_GAME_TYPEDEF
+#define PK_GAME_TYPEDEF
 typedef struct pk_game pk_game;
+#endif
 
 /* FUN_1006c228: the reset of a new game (saved part). */
 void pk_world_reset(pk_game *g);
