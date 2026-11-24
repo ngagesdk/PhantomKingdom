@@ -1377,7 +1377,7 @@ static void spawn_top_bar(pk_object *o, pk_game *g)
     pk_object_spawn(g, pk_kingdom_ui_update, o->dir, 0x80, 0, 0x7a, 0, 0x92);
 }
 
-static void to_edit(pk_object *o, pk_game *g)
+static void to_edit(pk_object *o)
 {
     o->counter = 0;
     o->state = 0xd;
