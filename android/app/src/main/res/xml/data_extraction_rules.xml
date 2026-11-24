@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12 and newer. Saves, identity.cfg (the online identity) and
+     arena.cfg live in files/ and are kept. The imported game data is the
+     user's own copy and can be large: it stays out of backups and transfers. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="game/" />
+        <exclude domain="file" path="game.import/" />
+        <exclude domain="file" path="game.old/" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="game/" />
+        <exclude domain="file" path="game.import/" />
+        <exclude domain="file" path="game.old/" />
+    </device-transfer>
+</data-extraction-rules>

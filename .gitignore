@@ -1,0 +1,53 @@
+# Build output
+build*/
+out/
+CMakeUserPresets.json
+compile_commands.json
+
+# IDE and editor state
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.swp
+*~
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local scratch folders
+_work/
+_to_delete/
+_merge_backup/
+
+# Game data must never be committed: users provide their own copy.
+data/
+mmc/
+/Fabbis/
+*.app
+*.mbm
+*.pcm
+*.dat
+*.rsc
+*.aif
+*.amr
+game.id
+identity.cfg
+options.cfg
+
+# Files the program writes at runtime (saves are *.dat, see above)
+screenshot-*.bmp
+
+# Packages
+*.apk
+*.aab
+
+# Reverse engineering artefacts derived from the game binary
+/re-work/
+*.gpr
+*.rep/
+*.gdr
+__pycache__/

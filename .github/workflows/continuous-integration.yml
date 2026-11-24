@@ -1,0 +1,106 @@
+name: Continuous Integration
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # Desktop builds and unit tests. No game data is involved: the tests use
+  # synthetic data only, and the packages contain the program, the font
+  # files and the documents.
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: SDL3 build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build pkg-config \
+            libasound2-dev libpulse-dev libpipewire-0.3-dev \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev \
+            libxss-dev libxtst-dev libxkbcommon-dev libdrm-dev libgbm-dev \
+            libgl1-mesa-dev libgles2-mesa-dev libegl1-mesa-dev \
+            libwayland-dev libdecor-0-dev libdbus-1-dev libibus-1.0-dev libudev-dev
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: Package
+        run: cmake --install build --prefix dist/PocketKingdom
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pocketkingdom-linux-x86_64
+          path: dist/
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Configure
+        run: cmake -S . -B build -A x64
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Package
+        run: cmake --install build --config Release --prefix dist/PocketKingdom
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pocketkingdom-windows-x64
+          path: dist/
+          if-no-files-found: error
+
+  # Android app: debug and release APK. The release APK is signed when the
+  # repository secrets ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
+  # ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD exist (see android/README.md);
+  # without them only the debug APK can be installed.
+  android:
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: SDK CMake (3.24 or newer)
+        run: |
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          v=$("$sdkmanager" --list 2>/dev/null | grep -oE 'cmake;3\.(2[4-9]|3[0-9])\.[0-9]+' | cut -d';' -f2 | sort -uV | tail -n 1)
+          if [ -z "$v" ]; then echo "::error::no SDK CMake 3.24+ available"; exit 1; fi
+          yes | "$sdkmanager" "cmake;$v" > /dev/null
+          echo "PK_CMAKE_VERSION=$v" >> "$GITHUB_ENV"
+          echo "SDK CMake $v"
+      - name: Signing key
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        working-directory: android
+        env:
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > upload.jks
+          printf 'storeFile=upload.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            "$STORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > keystore.properties
+      - name: Build
+        working-directory: android
+        run: bash ./gradlew --no-daemon -Ppk.cmakeVersion="$PK_CMAKE_VERSION" assembleDebug assembleRelease
+      - name: Collect
+        run: |
+          mkdir -p dist
+          cp android/app/build/outputs/apk/debug/*.apk android/app/build/outputs/apk/release/*.apk dist/
+          rm -f android/upload.jks android/keystore.properties
+          ls -l dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pocketkingdom-android
+          path: dist/*.apk
+          if-no-files-found: error

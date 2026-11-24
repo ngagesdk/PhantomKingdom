@@ -1,0 +1,23 @@
+PhantomKingdom brings Pocket Kingdom, the online strategy game of the Nokia N-Gage, back to life on Android. Found your kingdom offline, then take it to N-Gage Arena on a PhantomLink server and meet other players again.
+
+PhantomKingdom does not contain any of the original game's data. You use the original game files from your own Pocket Kingdom game card: copy them to your phone and import them in the app.
+
+HOW IT WORKS
+1. Copy the original game files from your Pocket Kingdom game card to your phone, as a folder or a ZIP archive.
+2. In PhantomKingdom, tap ZIP archive or Folder and select them. The app finds the game folder on its own and checks that nothing is missing.
+3. Tap the play button.
+
+FEATURES
+- A faithful reimplementation of Pocket Kingdom, made for touch screens: tap to choose, swipe to scroll; gamepads and keyboards work too
+- Imports game data from a ZIP archive or an existing folder, using Android's file picker (no storage permission needed)
+- Online play through PhantomLink; uses the Nokia N-Gage Discord Community's public server by default, or any server address you enter
+- Your N-Gage Arena account and the server are set on the start screen; a connection test is one tap away
+- Saves are included in Android's backup; the game files are not
+- Light and dark start screen, a detailed event log you can share
+- No ads, no tracking
+
+REQUIREMENTS
+- The original game files from your own Pocket Kingdom game card
+- An Internet connection and an account on the PhantomLink server for online play
+
+PhantomKingdom is a community project and is not affiliated with or endorsed by Nokia, HMD Global or the original publisher of Pocket Kingdom. N-Gage is a trademark of its respective owner.

@@ -1,0 +1,1 @@
+First release: Pocket Kingdom on Android, with a start screen to import your game data from a ZIP archive or folder and to set the PhantomLink server and N-Gage Arena account.

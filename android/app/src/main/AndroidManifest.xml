@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    android:installLocation="auto">
+
+    <uses-feature android:glEsVersion="0x00020000" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.hardware.gamepad" android:required="false" />
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+    <uses-feature android:name="android.hardware.type.pc" android:required="false" />
+
+    <!-- N-Gage Arena (PhantomLink) and the server test on the start screen -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Game data is imported through the system file picker (Storage Access
+         Framework), so no storage permission is needed. -->
+
+    <!-- Backups keep the saves, identity.cfg and arena.cfg (files/), but not
+         the imported game data (files/game): see res/xml. -->
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@style/Theme.PhantomKingdom"
+        android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:supportsRtl="true"
+        android:enableOnBackInvokedCallback="false"
+        android:hardwareAccelerated="true">
+
+        <!-- Start screen: game data, server, Arena account, play. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- "Open with PhantomKingdom" for ZIP archives from a file manager -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/zip" />
+            </intent-filter>
+        </activity>
+
+        <!-- The game (SDL, libmain.so). Started only by MainActivity. It runs in
+             its own process, which ends when the game is closed, so every
+             start begins with fresh native state. -->
+        <activity
+            android:name=".PocketKingdomActivity"
+            android:label="@string/app_name"
+            android:process=":game"
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+            android:alwaysRetainTaskState="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="sensorPortrait"
+            android:configChanges="layoutDirection|locale|grammaticalGender|fontScale|fontWeightAdjustment|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation"
+            android:preferMinimalPostProcessing="true"
+            android:exported="false" />
+    </application>
+</manifest>

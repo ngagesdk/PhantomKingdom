@@ -1,0 +1,1 @@
+Erste Version: Pocket Kingdom auf Android, mit einem Startbildschirm, um deine Spieldaten aus einem ZIP-Archiv oder Ordner zu importieren und PhantomLink-Server und N-Gage-Arena-Konto einzustellen.
