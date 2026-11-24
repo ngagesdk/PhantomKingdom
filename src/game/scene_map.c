@@ -309,6 +309,17 @@ static void scout_page(pk_game *g)
     }
 }
 
+/* the rival kingdoms the server reported for the searched area (message
+ * 134); the original keeps their count in area word 1, the port in
+ * g_rival_count (see ui_dialog.c) */
+static int srch_rivals(const pk_game *g)
+{
+    if (!g->arena_online || s_srch.kind != 0 || g_rival_area != s_srch.area) {
+        return 0;
+    }
+    return SDL_clamp(g_rival_count, 0, PK_RIVALS_MAX);
+}
+
 static void srch_page(pk_game *g, int page)
 {
     int i, y = 0x8e;
@@ -329,6 +340,19 @@ static void srch_page(pk_game *g, int page)
         }
         for (i = 0; i < s_srch.nbase && y < 0xd0; i++, y += 0xb) {
             pk_game_mestext(g, 0x38, 0x58, y, 0, PK_ALIGN_CENTER, 1, PK_FONT_DENSE);
+        }
+    } else if (page == 1) { /* FUN_1005a618 (online): the rival kingdoms in the area */
+        int n = srch_rivals(g);
+        if (n == 0) {
+            pk_game_mestext(g, 0x3b, 0x58, 0x78, 0, PK_ALIGN_CENTER, 1, PK_FONT_DENSE);
+            return;
+        }
+        srch_heading(g, 140, n, 148, 0x78);
+        for (i = 0; i < n && y < 0xd0; i++) {
+            if (g_rivals[i].name[0]) {
+                pk_drawq_text_utf8(&g->drawq, g_rivals[i].name, 0x58, y, 0, PK_ALIGN_CENTER, 1, PK_FONT_DENSE);
+                y += 0xb;
+            }
         }
     } else { /* FUN_1005a7a4: the materials and the storage */
         char cnt[16];
@@ -385,8 +409,11 @@ static void srch_report_update(pk_object *o, pk_game *g)
         if (o->counter > 4 && !pk_help_active() && (g->key_code == PK_SC_5 || g->key_code == PK_SC_BACK)) {
             pk_audio_play_sfx(0);
             o->counter = 0;
+            /* 0x10059514 states 4 -> 5 (online, rivals in the area) -> 6 */
             if (o->work[2] == 0 && s_srch.kind == 0) {
-                o->work[2] = 1;
+                o->work[2] = srch_rivals(g) > 0 ? 1 : 2;
+            } else if (o->work[2] == 1) {
+                o->work[2] = 2;
             } else {
                 pk_game_set_curtain(g, PK_CURTAIN_CLOSE);
                 o->state = 2;
