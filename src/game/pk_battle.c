@@ -39,6 +39,11 @@ typedef char pk_b_at_0xa00[offsetof(pk_battle, started) == 0xa00 ? 1 : -1];
 #define OBJ_ATTACK     0xc0
 #define IMG_BANNER     0x5e
 #define TBL_BANNER     0x1007da64u
+#define IMG_JUROR      0x6e
+#define TBL_JUROR      0x1007e64cu
+#define ANIM_JUROR_IN  0x1007e77cu /* frames 0..5, 2 ticks each */
+#define ANIM_JUROR_ASK 0x1007e7b4u /* frames 5 and 6, 3 ticks each */
+#define ANIM_MARK      0x1007e724u /* frames 0x3a..0x3d, 1 tick each */
 #define FIELD_LEFT     0x14
 #define FIELD_RIGHT    0x14c
 #define GROUND_Y       0x99
@@ -324,6 +329,97 @@ static void banner_update(pk_object *o, pk_game *g)
     default:
         break;
     }
+}
+
+/* 0x100046ec: one of the three jurors who announce the winner when the
+ * time is up (controller state 5). arg1: 0 right (0x78, 0x84), 1 middle
+ * (0x58, 0x89), 2 left (0x38, 0x84). They come in one after another,
+ * look to both sides and raise a flag: frame 8 for the side on the
+ * right, 7 for the left. The right one always votes 8, the left one 7,
+ * the middle one decides by the HP percentages (a tie goes to the right
+ * when the player fights there, otherwise to the left, as in the
+ * original). They go away when the controller is in state 9. */
+static void juror_update(pk_object *o, pk_game *g)
+{
+    pk_object *c;
+    int me, them;
+    switch (o->state) {
+    case 0:
+        o->image = pk_game_image_slot(g, IMG_JUROR);
+        pk_object_set_frames(o, TBL_JUROR);
+        o->flags = 0x441;
+        o->frame = 0;
+        o->layer = 0;
+        o->counter = o->arg1 * 2;
+        o->state = 1;
+        break;
+    case 1:
+        if (o->counter > 0) {
+            o->counter--;
+            break;
+        }
+        pk_object_set_anim(o, ANIM_JUROR_IN);
+        o->counter = 0;
+        o->state = 2;
+        break;
+    case 2:
+        if (++o->counter > 10) {
+            o->flags &= ~(Uint32)PK_OBJ_ANIMATING;
+            o->frame = 5;
+            o->counter = (2 - o->arg1) * 2;
+            o->state = 3;
+        }
+        break;
+    case 3:
+        if (o->counter > 0) {
+            o->counter--;
+            break;
+        }
+        pk_object_set_anim(o, ANIM_JUROR_ASK);
+        o->counter = 0;
+        o->state = 4;
+        break;
+    case 4:
+        if (++o->counter > 9) {
+            o->flags |= PK_OBJ_FLIP_X;
+            o->counter = 0;
+            o->state = 5;
+        }
+        break;
+    case 5:
+        if (++o->counter > 9) {
+            o->flags &= ~(Uint32)PK_OBJ_FLIP_X;
+            o->counter = o->arg1 == 1 ? 8 : o->arg1 == 2 ? 4 : 0;
+            o->state = 6;
+        }
+        break;
+    case 6:
+        if (o->counter > 0) {
+            o->counter--;
+            break;
+        }
+        o->flags &= ~(Uint32)PK_OBJ_ANIMATING;
+        if (o->arg1 == 0) {
+            o->frame = 8;
+        } else if (o->arg1 == 2) {
+            o->frame = 7;
+        } else {
+            me = hp_percent(1);
+            them = hp_percent(0);
+            o->frame = (me >= them) == (pk_b.player_side == 1) ? 8 : 7;
+        }
+        o->state = 7;
+        break;
+    case 7:
+        c = pk_object_find(g, OBJ_CONTROLLER, 0, 0);
+        if (c && c->state == 9) {
+            pk_object_kill(o);
+        }
+        break;
+    default:
+        break;
+    }
+    pk_object_animate(o);
 }
 
 /* FUN_100051a8, top bar: one name, bold (font 0), pass 1, unless the
@@ -1080,9 +1176,73 @@ static void hud_spawn(pk_game *g)
     pk_object_spawn(g, hud_update, OBJ_HUD, 0x31, 0, 1, 0x5c, 0x18);
 }
 
+/* FUN_10009a7c: the unit that speaks after the battle: the winning side's
+ * leader, or else its first unit still standing (NULL: nobody) */
+static pk_object *winner_unit(pk_game *g)
+{
+    int rs = pk_b.won ? 0 : 1;
+    int side = pk_b.won ? pk_b.player_side : (pk_b.player_side == 0 ? 1 : 0);
+    int sl = pk_b.leader[rs], i;
+    if (sl < 0 || sl > 5 || pk_b.rec[rs][sl][22] != 0) {
+        sl = -1;
+        for (i = 0; i < 4; i++) {
+            if (pk_b.rec[rs][i][0] != 0xff && pk_b.rec[rs][i][22] == 0) {
+                sl = i;
+                break;
+            }
+        }
+        if (sl < 0) {
+            return NULL;
+        }
+    }
+    return unit_object(g, side, sl);
+}
+
+/* 0x10004654: the marker over the unit that speaks after the battle
+ * (image 0x5e, frames 0x1007da64, animation 0x1007e724); it goes when
+ * game+0x458 is set again */
+static void speaker_mark_update(pk_object *o, pk_game *g)
+{
+    switch (o->state) {
+    case 0:
+        o->image = pk_game_image_slot(g, IMG_BANNER);
+        pk_object_set_frames(o, TBL_BANNER);
+        o->flags = 0x481;
+        pk_object_set_anim(o, ANIM_MARK);
+        o->layer = 1;
+        pk_object_clear_work(o);
+        o->state = 1;
+        break;
+    case 1:
+        pk_object_animate(o);
+        if (pk_b.started) {
+            pk_object_kill(o);
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+/* controller state 3 when the time runs out: everyone stops, the panel
+ * goes (game+0x45c = 0, +0x464 = 0xff) */
+static void time_up(pk_object *o)
+{
+    pk_b.time = 0;
+    pk_b.over = 1;
+    pk_b.special_msg = 0;
+    o->work[0] = 0;
+    o->counter = 0;
+    o->state = 5;
+}
+
+/* The camera (FUN_100049e0) runs in states 2, 3 and 9 only; the top bar
+ * and the panel (FUN_100051a8) every tick except the one on which state 3
+ * ends the fight. */
 static void controller_update(pk_object *o, pk_game *g)
 {
     int d;
+    bool cam = o->state == 2 || o->state == 9, hud = true;
     switch (o->state) {
     case 0:
         pk_b.over = 0;
@@ -1140,30 +1300,52 @@ static void controller_update(pk_object *o, pk_game *g)
         }
         break;
     case 3: /* fighting */
-        trap_tick(g);
-        if (g->boss_battle == 1 && pk_b.rec[1][pk_b.leader[1] & 3][0] != 0xff &&
-            pk_b.rec[1][pk_b.leader[1] & 3][22] != 0) {
-            pk_b.over = 1; /* the area boss is down */
-            o->counter = 0;
-            o->state = 4;
-            break;
-        }
-        d = alive_all_down();
-        if (d != 0) {
-            o->counter = 0;
-            o->state = 4;
-            break;
-        }
         if (pk_b.trap_done >= 2) {
+            /* port: the trap runs here (the original's controller becomes
+             * the trap object 0x10002910 meanwhile) */
+            trap_tick(g);
+            cam = true;
             break;
         }
-        if (--pk_b.time < 1) {
-            pk_b.time = 0;
-            pk_b.over = 1;
-            pk_object_spawn(g, banner_update, OBJ_CONTROLLER, 0, 0, 2, 0x58, 100);
-            o->counter = 0;
-            o->state = 5;
+        if (pk_b.over) { /* a special move runs: the clock waits too */
+            cam = true;
+            break;
         }
+        if (g->boss_battle == 1) {
+            if (pk_b.rec[1][pk_b.leader[1] & 3][0] != 0xff &&
+                pk_b.rec[1][pk_b.leader[1] & 3][22] != 0) {
+                pk_b.over = 1; /* the area boss is down */
+                o->counter = 0;
+                o->state = 4;
+                hud = false;
+                break;
+            }
+            if (alive_all_down() == 1) { /* the player's units are down */
+                o->counter = 0;
+                o->state = 4;
+                hud = false;
+                break;
+            }
+            if (--pk_b.time < 1) {
+                time_up(o);
+                hud = false;
+                break;
+            }
+        } else {
+            if (--pk_b.time < 1) {
+                time_up(o);
+                hud = false;
+                break;
+            }
+            if (alive_all_down() != 0) {
+                o->counter = 0;
+                o->state = 4;
+                hud = false;
+                break;
+            }
+        }
+        trap_tick(g);
+        cam = true;
         break;
     case 4:
         if (++o->counter < 0x10) {
@@ -1178,31 +1360,89 @@ static void controller_update(pk_object *o, pk_game *g)
             } else {
                 o->state = 7;
             }
-        } else if (d & 0x10) {
+        } else if (d == 0x10) { /* only the enemy is down (both: by HP) */
             o->state = 6;
         } else {
             int me = hp_percent(1), them = hp_percent(0);
             o->state = (me > them || (me == them && pk_b.player_side == 1)) ? 6 : 7;
         }
         break;
-    case 5: /* time over */
-        if (++o->counter < 0x32) {
+    case 5: /* time over (0x10000824 state 5) */
+        switch (o->work[0]) {
+        case 0: /* the "time up" banner; a boss battle is judged at once */
+            pk_object_spawn(g, banner_update, OBJ_CONTROLLER, 0, 0, 2, 0x58, 100);
+            o->counter = 0;
+            o->work[0] = 1;
+            if (g->boss_battle == 1) {
+                o->state = 4;
+            }
+            break;
+        case 1: /* the three jurors (0x100046ec) */
+            if (++o->counter > 0x2c) {
+                pk_object_spawn(g, juror_update, OBJ_CONTROLLER, 0, 0, 0, 0x78, 0x84);
+                pk_object_spawn(g, juror_update, OBJ_CONTROLLER, 0, 0, 1, 0x58, 0x89);
+                pk_object_spawn(g, juror_update, OBJ_CONTROLLER, 0, 0, 2, 0x38, 0x84);
+                o->work[0] = 2;
+                o->counter = 0;
+            }
+            break;
+        case 2:
+            if (++o->counter > 10) {
+                o->counter = 0;
+                o->work[0] = 3;
+            }
+            break;
+        case 3: /* the verdict: the HP percentages, as in state 4 */
+            if (++o->counter > 0x31) {
+                int me = hp_percent(1), them = hp_percent(0);
+                o->counter = 0;
+                o->work[0] = 0;
+                o->state = (me > them || (me == them && pk_b.player_side == 1)) ? 6 : 7;
+            }
+            break;
+        default:
             break;
         }
-        o->counter = 0;
-        o->state = 4;
         break;
     case 6:
     case 7:
         pk_b.won = o->state == 6;
-        pk_object_spawn(g, banner_update, OBJ_CONTROLLER, 0, 0, o->state == 6 ? 0 : 1, 0x58, 0x68);
-        o->counter = 0;
+        pk_object_spawn(g, banner_update, OBJ_CONTROLLER, 0, 0, o->state == 6 ? 0 : 1, 0x58, 100);
         o->state = 8;
         break;
     case 8:
         if (++o->counter > 0x15) {
-            pk_game_set_curtain(g, PK_CURTAIN_CLOSE);
-            o->state = 10;
+            o->work[0] = 0;
+            o->counter = 0;
+            o->state = 9;
+        }
+        break;
+    case 9: /* the winning side's leader has the last word (battlemes.dat
+             * group 1), then the curtain closes */
+        if (o->work[0] == 0) {
+            pk_object *u = winner_unit(g);
+            if (!u) {
+                pk_game_set_curtain(g, PK_CURTAIN_CLOSE);
+                o->counter = 0;
+                o->state = 10;
+                break;
+            }
+            u->state = 0; /* back to its idle pose */
+            u->flags |= 0x200000u; /* keeps moving while everyone else stops */
+            pk_b.cam[1] = 7;
+            pk_b.cam[2] = u->x;
+            pk_b.cam[3] = u->y;
+            pk_b.started = 0;
+            pk_object_spawn(g, speaker_mark_update, OBJ_CONTROLLER, 0, 0x10, 0, u->x, u->y - 0x36);
+            pk_battle_panel(g, u, 1);
+            o->work[0] = 1;
+            o->counter = 0;
+        } else if (o->work[0] == 1) {
+            if (++o->counter > 0x20 || g->key_code == PK_SC_5 || g->key_code == PK_SC_BACK) {
+                pk_game_set_curtain(g, PK_CURTAIN_CLOSE);
+                o->counter = 0;
+                o->state = 10;
+            }
         }
         break;
     case 10:
@@ -1213,8 +1453,10 @@ static void controller_update(pk_object *o, pk_game *g)
     default:
         break;
     }
-    if (o->state >= 2) {
+    if (cam) {
         camera_follow(g);
+    }
+    if (hud) {
         draw_hud(g);
     }
 }
@@ -1239,6 +1481,7 @@ void pk_mode_battle(pk_game *g)
         pk_game_set_bg(g, 0, pk_b.field + 0x86);
         g->bg_visible = 1;
         pk_game_load_image(g, IMG_BANNER, 1);
+        pk_game_load_image(g, IMG_JUROR, 1);
         pk_game_load_image(g, 0x17, 1);
         pk_object_spawn(g, controller_update, OBJ_CONTROLLER, 0, 0, 0, 0, 0);
         for (s = 0; s < 2; s++) {

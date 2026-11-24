@@ -614,6 +614,55 @@ Camera (FUN_100049e0): after the intro game+0xa8 = 8, the held left /
 right key pans 8 px a tick between 0 and 0xb0; modes 5 / 7 centre on
 game+0xac.
 
+## Time over (controller state 5) and the jurors (0x100046ec)
+
+When the timer (game+0x49c) runs out, state 3 sets it to 0, game+0x44c =
+1, clears the panel (+0x45c = 0, +0x464 = 0xff) and enters state 5 with
+substate +0x18 = 0:
+
+- 0: banner frame 0x69 ("time up", 0x10004f68 arg 2 at 0x58, 100). A boss
+  battle goes to state 4 at once (judged like a knockout).
+- 1: after 45 ticks three juror objects 0x100046ec (type 0xc3, image
+  0x6e, frames 0x1007e64c), arg1 0 at (0x78, 0x84), 1 at (0x58, 0x89),
+  2 at (0x38, 0x84).
+- 2: 11 ticks, 3: 50 ticks, then the HP percentages (FUN_10004e80) pick
+  state 6 (won) or 7 (lost); a tie is a win only when the player fights
+  on the right (+0x498 == 1).
+
+A juror waits arg1 * 2 ticks, walks in (animation 0x1007e77c, frames 0..5,
+11 ticks), stands on frame 5, waits (2 - arg1) * 2 ticks, looks around
+(animation 0x1007e7b4, frames 5/6; mirrored after 10 ticks, back after 10
+more), waits 0 / 8 / 4 ticks (arg1 0 / 1 / 2) and raises its flag: frame 8
+(right side) or 7 (left side). The right juror always shows 8, the left
+one 7, the middle one 8 when (team HP % >= enemy HP %) equals (+0x498 ==
+1), else 7. It deletes itself once the controller (type 0xc3, 0, 0) is in
+state 9. Image 0x6e is one of the 21 images the battle setup queues
+(table 0x100ae964).
+
+## Battle end (controller states 3, 4, 6..10)
+
+- State 3 does nothing but the camera while game+0x44c is set (a special
+  move): the clock stops too. A boss battle ends when the boss is down
+  (+0x44c = 1) or every unit of the player's is (FUN_10004ccc == 1),
+  otherwise the clock counts; other battles count first and then end
+  when either side is down. The tick that ends the fight skips the
+  camera and the top bar. The trap check follows.
+- State 4 (16 ticks): FUN_10004ccc == 0x10 (only the enemy down) wins,
+  anything else goes by the HP percentages.
+- States 6 / 7: +0x99c = 1 / 0, banner frame 0x23 / 0x24 at (0x58, 100).
+- State 8: 22 ticks.
+- State 9: FUN_10009a7c picks the winning side's leader (record side 0
+  when +0x99c is set, else 1), else its first unit still standing. None:
+  the curtain closes. Otherwise that unit goes to state 0 (idle) with
+  0x200000 (moves while +0x44c is set), the camera jumps to it (mode 7),
+  +0x458 = 0, the marker 0x10004654 (image 0x5e, animation 0x1007e724,
+  flags 0x481, arg0 0x10) appears at (x, y - 0x36) and FUN_10009c2c shows
+  its line of group 1. After 33 ticks or key 5 / the right soft key the
+  curtain closes.
+- State 10: once the curtain is shut, mode 2 (the results).
+
+The camera runs in states 2, 3 and 9 only.
+
 ## Effect object 0x100155f4 (type 0xc1)
 
 One object class draws every battle effect; its state selects it (hit
