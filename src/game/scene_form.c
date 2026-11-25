@@ -1419,7 +1419,7 @@ void pk_form_update(pk_object *o, pk_game *g)
             g->team_sel = g->list_top + g->cursor;
             g->sel = g->sel2 = 0;
             g->slide = 0;
-            to_edit(o, g);
+            to_edit(o);
         } else {
             pk_game_set_curtain(g, PK_CURTAIN_CLOSE);
             o->counter = 0;
@@ -1460,13 +1460,13 @@ void pk_form_update(pk_object *o, pk_game *g)
             g->dlg_type = 1;
             call(o, g, pk_dialog_update, 0x18); /* order */
         } else {
-            to_edit(o, g);
+            to_edit(o);
         }
         break;
     case 0x12: /* Select / Clear unit */
         if (g->dlg_result != 0) {
             g->slide = 1;
-            to_edit(o, g);
+            to_edit(o);
             break;
         }
         g->slide = 0;
@@ -1511,7 +1511,7 @@ void pk_form_update(pk_object *o, pk_game *g)
                     g->world.h_dc = 0xff;
                 }
             }
-            to_edit(o, g);
+            to_edit(o);
         }
         break;
     case 0x13: /* unit chosen */
@@ -1528,12 +1528,12 @@ void pk_form_update(pk_object *o, pk_game *g)
             first_leader(g, g->team_sel);
         }
         g->slide = 1;
-        to_edit(o, g);
+        to_edit(o);
         break;
     case 0x14: /* equipment Select / Clear */
         if (g->dlg_result != 0) {
             g->slide = 1;
-            to_edit(o, g);
+            to_edit(o);
             break;
         }
         if (g->cursor == 0) {
@@ -1545,7 +1545,7 @@ void pk_form_update(pk_object *o, pk_game *g)
                 unequip(g, tm[g->sel]);
             }
             g->slide = 1;
-            to_edit(o, g);
+            to_edit(o);
         }
         break;
     case 0x15: /* Weapons / Armor / Accessories */
@@ -1574,21 +1574,21 @@ void pk_form_update(pk_object *o, pk_game *g)
             }
         }
         g->slide = 1;
-        to_edit(o, g);
+        to_edit(o);
         break;
     case 0x17: /* targeting */
         if (g->dlg_result == 0) {
             tm[4 + g->sel] = g->cursor;
         }
         g->slide = 1;
-        to_edit(o, g);
+        to_edit(o);
         break;
     case 0x18: /* order */
         if (g->dlg_result == 0) {
             tm[8] = g->cursor;
         }
         g->slide = 1;
-        to_edit(o, g);
+        to_edit(o);
         break;
     case 0xf: /* back to the kingdom screen */
         if (g->curtain == PK_CURTAIN_HELD) {
