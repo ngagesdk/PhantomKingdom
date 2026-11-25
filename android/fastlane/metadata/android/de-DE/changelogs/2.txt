@@ -1,7 +1,8 @@
-- Flüssigere Bewegungen und Übergänge, standardmäßig in den Einstellungen aktiviert.
-- Originale N-Gage-Speicherstände importieren und exportieren.
-- Online-Rivalenkönigreiche überarbeitet: Basen suchen, auskundschaften und angreifen.
-- Neue Kampffallen und bessere Kampfabschlüsse mit Kampfrichtern bei Zeitablauf.
-- Gebietsmeldungen und Pop-ups verbessert.
-- Online-Missionen, Verbindungen, Chat und Zufallszahlen verbessert.
-- Upgrades müssen vor dem Ausgeben von Loot bestätigt werden.
+- Flüssigere Animationen (standardmäßig aktiviert).
+- Import und Export originaler N-Gage-Spielstände.
+- Verbesserte Online-Rivalenkönigreiche: Suchen, Auskundschaften und Angreifen.
+- Neue Kampffallen und verbesserte Kampfabschlüsse bei Zeitablauf.
+- Optimierte Gebietsmeldungen und Pop-ups.
+- Verbesserte Online-Missionen, Verbindungen, Chat und Zufallszahlen.
+- Upgrade-Bestätigung vor dem Ausgeben von Loot.
+- Fehler bei erneuter Arena-Anmeldung behoben.

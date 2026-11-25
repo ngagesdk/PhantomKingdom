@@ -550,6 +550,7 @@ void pk_mode_arena(pk_game *g)
         }
         break;
     default: /* back to the title */
+        pk_online_stop();
         g->entry_reason = 0;
         g->skip_intro = true;
         pk_game_set_mode(g, PK_MODE_BOOT);

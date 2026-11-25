@@ -39,6 +39,9 @@ void pk_game_shutdown(pk_game *g)
 
 void pk_game_set_mode(pk_game *g, int mode)
 {
+    if (mode == PK_MODE_BOOT && g->arena_online) {
+        pk_arena_go_offline(g);
+    }
     g->mode = mode;
     g->overlay_id = -1;
     g->call_ret_fn = NULL;
