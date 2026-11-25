@@ -1,6 +1,6 @@
-- Es können jetzt originale N-Gage-Speicherstände importiert und exportiert werden.
-- Online-Rivalenkönigreiche überarbeitet: Suche nach gegnerischen Basen, kundschafte sie aus und greife sie an.
-- Weitere Kampffallen hinzugefügt und Kampfabschlüsse verbessert, einschließlich Kampfrichtern bei Zeitablauf.
-- Meldungen zu neu freigeschalteten Gebieten wiederhergestellt und Gebiets-Pop-ups verbessert.
-- Online-Missionen, Verbindungsverwaltung, Chat und Zufallszahlengenerator verbessert.
-- Wartung und Build verbessert.
+- Flüssigere Bewegungen und Übergänge, standardmäßig in den Einstellungen aktiviert.
+- Originale N-Gage-Speicherstände importieren und exportieren.
+- Online-Rivalenkönigreiche überarbeitet: Basen suchen, auskundschaften und angreifen.
+- Neue Kampffallen und bessere Kampfabschlüsse mit Kampfrichtern bei Zeitablauf.
+- Gebietsmeldungen und Pop-ups verbessert.
+- Online-Missionen, Verbindungen, Chat und Zufallszahlen verbessert.

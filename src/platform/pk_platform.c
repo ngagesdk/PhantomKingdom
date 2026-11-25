@@ -11,6 +11,7 @@ static struct
     SDL_Window *win;
     SDL_Renderer *ren;
     SDL_Texture *tex;
+    const Uint32 *presented;
     bool fullscreen;
 } P;
 
@@ -67,10 +68,16 @@ void pk_platform_quit(void)
 
 void pk_platform_present(void)
 {
+    pk_platform_present_frame(pk_gfx_framebuffer());
+}
+
+void pk_platform_present_frame(const Uint32 *pixels)
+{
     if (!P.ren) {
         return;
     }
-    SDL_UpdateTexture(P.tex, NULL, pk_gfx_framebuffer(), PK_SCREEN_W * 4);
+    P.presented = pixels;
+    SDL_UpdateTexture(P.tex, NULL, pixels, PK_SCREEN_W * 4);
     SDL_SetRenderDrawColor(P.ren, 0, 0, 0, 255);
     SDL_RenderClear(P.ren);
     SDL_RenderTexture(P.ren, P.tex, NULL, NULL);
@@ -80,8 +87,9 @@ void pk_platform_present(void)
 bool pk_platform_screenshot(const char *path)
 {
     bool ok;
+    const Uint32 *pixels = P.presented ? P.presented : pk_gfx_framebuffer();
     SDL_Surface *s = SDL_CreateSurfaceFrom(PK_SCREEN_W, PK_SCREEN_H, SDL_PIXELFORMAT_ARGB8888,
-                                           pk_gfx_framebuffer(), PK_SCREEN_W * 4);
+                                           (void *)pixels, PK_SCREEN_W * 4);
     if (!s) {
         return false;
     }

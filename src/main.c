@@ -53,6 +53,7 @@ typedef struct options
     bool verbose;
     bool no_audio;
     bool no_haptics;
+    bool smooth;
     bool lang_set;
 } options;
 
@@ -68,6 +69,7 @@ static void usage(void)
             "  --audio-rate HZ     sample rate of the .pcm files (default 8000)\n"
             "  --no-audio\n"
             "  --no-haptics        no vibration on touch input\n"
+            "  --smooth            interpolate movement and transitions at up to 60 FPS\n"
 #ifdef PK_ENABLE_ASSET_VIEWER
             "  --viewer            start in the asset viewer\n"
 #endif
@@ -159,6 +161,8 @@ static bool parse_args(int argc, char **argv, options *o)
             o->no_audio = true;
         } else if (!SDL_strcmp(a, "--no-haptics")) {
             o->no_haptics = true;
+        } else if (!SDL_strcmp(a, "--smooth")) {
+            o->smooth = true;
         } else if (!SDL_strcmp(a, "--verbose")) {
             o->verbose = true;
         } else if (!SDL_strcmp(a, "--help") || !SDL_strcmp(a, "-h")) {
@@ -287,8 +291,9 @@ int main(int argc, char **argv)
     pk_game game;
     pk_platform_config pc;
     char missing[1024];
-    bool headless;
-    Uint64 last, acc = 0;
+    bool headless, smooth_ready = false;
+    Uint64 last, acc = 0, next_present = 0;
+    static Uint32 smooth_frame[PK_SCREEN_W * PK_SCREEN_H];
     int ticks = 0;
 
     if (!parse_args(argc, argv, &opt)) {
@@ -457,10 +462,27 @@ int main(int argc, char **argv)
             acc = PK_TIMER_INTERVAL_US * 1000ull; /* after a stall, do not race to catch up */
         }
         while (acc >= PK_TIMER_INTERVAL_US * 1000ull) {
+            int phase = game.tick_phase;
             acc -= PK_TIMER_INTERVAL_US * 1000ull;
+            if (opt.smooth && phase == 0) {
+                pk_game_smooth_begin(&game);
+            }
             drawn |= pk_game_tick(&game);
+            if (opt.smooth && phase == 0) {
+                smooth_ready = pk_game_smooth_capture(&game);
+            }
         }
-        if (drawn) {
+        if (opt.smooth && smooth_ready && now >= next_present) {
+            Uint64 elapsed = acc;
+            if (game.tick_phase == 2) {
+                elapsed += PK_TIMER_INTERVAL_US * 1000ull;
+            } else if (game.tick_phase == 0) {
+                elapsed += 2ull * PK_TIMER_INTERVAL_US * 1000ull;
+            }
+            pk_game_smooth_render(&game, smooth_frame, elapsed);
+            pk_platform_present_frame(smooth_frame);
+            next_present = now + 1000000000ull / 60;
+        } else if (drawn && (!opt.smooth || !smooth_ready)) {
             pk_platform_present();
         }
         SDL_DelayNS(1000000);

@@ -194,6 +194,11 @@ bool pk_swipe_list(pk_game *g, int *top, int *cursor, int count, int visible);
 /* One 30 ms timer tick. Returns true when the frame buffer changed. */
 bool pk_game_tick(pk_game *g);
 
+/* Optional visual interpolation; these do not advance the game simulation. */
+void pk_game_smooth_begin(pk_game *g);
+bool pk_game_smooth_capture(pk_game *g);
+void pk_game_smooth_render(pk_game *g, Uint32 *out, Uint64 elapsed_ns);
+
 void pk_game_set_mode(pk_game *g, int mode);       /* FUN_10070844 */
 void pk_game_set_phase(pk_game *g, int phase);     /* FUN_10070874 */
 void pk_game_set_curtain(pk_game *g, int mode);    /* FUN_1007088c */

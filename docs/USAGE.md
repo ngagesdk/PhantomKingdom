@@ -32,8 +32,15 @@ phone's IMEI: `--imei <15 digits>`.
     pocketkingdom --data /path/to/6rah
 
 Options: `--lang en|fr|de|it|es`, `--scale N`, `--fullscreen`,
-`--audio-rate HZ`, `--no-audio`, `--no-haptics`, `--imei DIGITS`, `--pref DIR`,
-`--arena-host HOST --arena-test USER PASSWORD`; `--help` lists all.
+`--audio-rate HZ`, `--no-audio`, `--no-haptics`, `--smooth`, `--imei DIGITS`,
+`--pref DIR`, `--arena-host HOST --arena-test USER PASSWORD`; `--help` lists all.
+
+`--smooth` redraws moving objects, matching text and sprites, camera movement
+and curtain transitions at up to 60 FPS between the original frames. Screen
+changes, pause screens and scenes using a persistent background fall back to
+original frames to avoid visual artifacts. Game logic, timing and sprite-frame
+animations retain their original speed; sprite artwork is not interpolated. The
+option has no effect on headless `--frames` runs.
 
 ## Keyboard
 

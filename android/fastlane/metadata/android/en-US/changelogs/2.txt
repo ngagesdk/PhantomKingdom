@@ -1,6 +1,7 @@
-- It can now import and export original N-Gage save files
+- Smooth movement and transitions, enabled by default in Settings.
+- Import and export original N-Gage save files.
 - Reworked online rival kingdoms: search for, scout and attack rival bases.
-- Added more battle traps and improved battle endings, including judges when time runs out.
-- Restored newly unlocked area announcements and improved area pop-ups.
-- Improved online mission and connection handling, chat and random number generation.
+- Added battle traps and improved endings, including judges at timeout.
+- Restored unlocked area announcements and improved pop-ups.
+- Improved online missions, connections, chat and random number generation.
 - General maintenance and build improvements.

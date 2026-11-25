@@ -24,6 +24,10 @@ Tabs: **Game** (play, status, import), **Log**, **Settings**.
 | Arena password | `--arena-pass` (when set) | empty: as above |
 | Imported game data | `--data <folder with 6rah.app>` | not passed for data copied over USB |
 | Vibrate on touch | `--no-haptics` when off | on |
+| Smooth rendering | `--smooth` when on | on |
+
+Smooth rendering interpolates movement and transitions without changing the game
+speed. Changes apply the next time the game starts.
 
 The game saves host, user and password in `arena.cfg` itself
 (`pk_arena_set_account`). The Settings tab shows the game's IMEI from

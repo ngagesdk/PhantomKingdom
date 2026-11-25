@@ -230,6 +230,68 @@ static void test_touch(void)
     CHECK(pk_swipe_list(&g, &top, &cur, 12, 5) && top == 7);
 }
 
+static void test_smooth(void)
+{
+    static pk_game g;
+    static Uint32 frame[PK_SCREEN_W * PK_SCREEN_H];
+    Uint32 green = 0xFF00FF00u;
+    pk_image image = { 1, 1, &green };
+    pk_object *o;
+    Uint32 *fb = pk_gfx_framebuffer();
+    pk_game_init(&g);
+    pk_gfx_set_clip(NULL);
+    pk_gfx_clear(0xFF000000u);
+    g.bg_visible = 1;
+    g.bg_id[0] = 0;
+    o = pk_object_spawn(&g, NULL, 0, 0, 0, 0, 10, 10);
+    CHECK(o != NULL);
+    if (!o) {
+        pk_game_shutdown(&g);
+        return;
+    }
+    o->image = 0;
+    o->flags = PK_OBJ_RECT | PK_OBJ_SCREEN;
+    o->w = o->h = 1;
+    o->work[0] = 255;
+    pk_drawq_sprite(&g.drawq, &image, NULL, 10, 20, 0, 0);
+    pk_game_smooth_begin(&g);
+    o->x = 22;
+    CHECK(pk_game_smooth_capture(&g));
+    pk_game_smooth_render(&g, frame, 45000000ull);
+    CHECK(frame[10 * PK_SCREEN_W + 16] == 0xFFFF0000u);
+    CHECK(o->x == 22 && fb[10 * PK_SCREEN_W + 16] == 0xFF000000u);
+    pk_game_smooth_render(&g, frame, 22500000ull);
+    CHECK(frame[10 * PK_SCREEN_W + 13] == 0xFFFF0000u);
+    pk_game_smooth_render(&g, frame, 90000000ull);
+    CHECK(frame[10 * PK_SCREEN_W + 22] == 0xFFFF0000u && o->x == 22);
+
+    pk_drawq_reset(&g.drawq);
+    pk_game_smooth_begin(&g);
+    o->x = 34;
+    pk_drawq_sprite(&g.drawq, &image, NULL, 22, 20, 0, 0);
+    g.curtain = PK_CURTAIN_CLOSE;
+    g.curtain_w = 32;
+    pk_gfx_clear(0xFFFFFFFFu);
+    CHECK(pk_game_smooth_capture(&g));
+    pk_game_smooth_render(&g, frame, 45000000ull);
+    CHECK(frame[10 * PK_SCREEN_W + 28] == 0xFFFF0000u);
+    CHECK(frame[20 * PK_SCREEN_W + 16] == 0xFF00FF00u);
+    CHECK(frame[0 * PK_SCREEN_W + 15] == 0xFF000000u);
+    CHECK(frame[0 * PK_SCREEN_W + 16] == 0xFFFFFFFFu);
+    CHECK(o->x == 34 && g.drawq.sprite[0].x == 22 && fb[0] == 0xFFFFFFFFu);
+    pk_drawq_reset(&g.drawq);
+    pk_game_smooth_render(&g, frame, 45000000ull);
+    CHECK(frame[20 * PK_SCREEN_W + 16] == 0xFF00FF00u && g.drawq.sprite_count == 0);
+
+    pk_game_smooth_begin(&g);
+    g.phase++;
+    CHECK(!pk_game_smooth_capture(&g));
+    pk_game_smooth_begin(&g);
+    g.bg_visible = 0;
+    CHECK(!pk_game_smooth_capture(&g));
+    pk_game_shutdown(&g);
+}
+
 int main(int argc, char **argv)
 {
     (void)argc;
@@ -242,6 +304,7 @@ int main(int argc, char **argv)
     test_font();
     test_world();
     test_touch();
+    test_smooth();
     SDL_Log("%d checks, %d failed", g_run, g_fail);
     return g_fail ? 1 : 0;
 }

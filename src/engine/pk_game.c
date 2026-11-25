@@ -644,6 +644,169 @@ static void advance_curtain(pk_game *g)
     }
 }
 
+/* The canonical framebuffer and draw queue must survive extra renders: some
+ * scenes draw into a persistent back buffer during their logic update. */
+static struct
+{
+    Uint32 base[PK_SCREEN_W * PK_SCREEN_H];
+    Uint32 canonical[PK_SCREEN_W * PK_SCREEN_H];
+    pk_drawq queue, previous_queue, saved_queue;
+    pk_object_list *list;
+    int mode, phase, cam_x, cam_y, bg_visible, bg_id[3], overlay_id;
+    int curtain, curtain_w, previous_curtain_w;
+    bool have_curtain, have_queue, paused, same_scene, can_redraw;
+} smooth;
+
+void pk_game_smooth_begin(pk_game *g)
+{
+    int i;
+    smooth.list = g->objects;
+    smooth.mode = g->mode;
+    smooth.phase = g->phase;
+    smooth.cam_x = g->cam_x;
+    smooth.cam_y = g->cam_y;
+    smooth.bg_visible = g->bg_visible;
+    SDL_memcpy(smooth.bg_id, g->bg_id, sizeof(smooth.bg_id));
+    smooth.overlay_id = g->overlay_id;
+    smooth.paused = pk_pause_active();
+    for (i = 0; i < g->objects->count; i++) {
+        pk_object *o = g->objects->items[i];
+        o->smooth_x = o->x;
+        o->smooth_y = o->y;
+        o->smooth_image = o->image;
+        o->smooth_frames = o->frames;
+        o->smooth_flags = o->flags;
+        o->smooth_valid = true;
+    }
+}
+
+bool pk_game_smooth_capture(pk_game *g)
+{
+    SDL_memcpy(smooth.base, pk_gfx_framebuffer(), sizeof(smooth.base));
+    smooth.have_queue = smooth.have_curtain;
+    smooth.previous_queue = smooth.queue;
+    smooth.queue = g->drawq;
+    smooth.same_scene = smooth.list == g->objects && smooth.mode == g->mode && smooth.phase == g->phase &&
+                        smooth.paused == pk_pause_active() && smooth.bg_visible == g->bg_visible &&
+                        smooth.overlay_id == g->overlay_id &&
+                        SDL_memcmp(smooth.bg_id, g->bg_id, sizeof(smooth.bg_id)) == 0;
+    smooth.can_redraw = !pk_pause_active() && g->bg_visible && g->bg_id[0] != PK_IMAGE_NONE;
+    smooth.previous_curtain_w = SDL_clamp(smooth.curtain_w, 0, PK_SCREEN_W);
+    smooth.curtain = g->curtain;
+    smooth.curtain_w = g->curtain == PK_CURTAIN_NONE ? 0 : SDL_clamp(g->curtain_w, 0, PK_SCREEN_W);
+    if (!smooth.have_curtain || !smooth.same_scene) {
+        smooth.previous_curtain_w = smooth.curtain_w;
+    }
+    smooth.have_curtain = true;
+    return smooth.can_redraw && smooth.same_scene;
+}
+
+static int smooth_lerp(int from, int to, Uint64 elapsed_ns)
+{
+    const Uint64 duration = (Uint64)PK_TICKS_PER_FRAME * PK_TIMER_INTERVAL_US * 1000ull;
+    Sint64 delta = (Sint64)to - from;
+    if (elapsed_ns >= duration || delta > 64 || delta < -64) {
+        return to;
+    }
+    return from + (int)(delta * (Sint64)elapsed_ns / (Sint64)duration);
+}
+
+static bool smooth_text_equal(const Uint16 *a, const Uint16 *b)
+{
+    while (*a && *a == *b) {
+        a++;
+        b++;
+    }
+    return *a == *b;
+}
+
+static void smooth_queue_positions(pk_drawq *q, Uint64 elapsed_ns)
+{
+    int i;
+    for (i = 0; i < q->text_count && i < smooth.previous_queue.text_count; i++) {
+        pk_text_cmd *t = &q->text[i];
+        const pk_text_cmd *old = &smooth.previous_queue.text[i];
+        if (t->align == old->align && t->layer == old->layer && t->font == old->font &&
+            smooth_text_equal(t->text, old->text)) {
+            t->x = smooth_lerp(old->x, t->x, elapsed_ns);
+            t->y = smooth_lerp(old->y, t->y, elapsed_ns);
+        }
+    }
+    for (i = 0; i < q->sprite_count && i < smooth.previous_queue.sprite_count; i++) {
+        pk_sprite_cmd *s = &q->sprite[i];
+        const pk_sprite_cmd *old = &smooth.previous_queue.sprite[i];
+        if (s->img == old->img && s->layer == old->layer && s->flags == old->flags &&
+            SDL_memcmp(&s->src, &old->src, sizeof(s->src)) == 0) {
+            s->x = smooth_lerp(old->x, s->x, elapsed_ns);
+            s->y = smooth_lerp(old->y, s->y, elapsed_ns);
+        }
+    }
+}
+
+void pk_game_smooth_render(pk_game *g, Uint32 *out, Uint64 elapsed_ns)
+{
+    int i, cam_x = g->cam_x, cam_y = g->cam_y;
+    int curtain = g->curtain, curtain_w = g->curtain_w, render_pass = g->render_pass;
+    bool same_scene = smooth.same_scene && smooth.list == g->objects && smooth.mode == g->mode &&
+                      smooth.paused == pk_pause_active();
+    Uint32 *fb = pk_gfx_framebuffer();
+
+    if (!smooth.can_redraw) {
+        SDL_memcpy(out, fb, sizeof(smooth.base));
+        return;
+    }
+    SDL_memcpy(smooth.canonical, fb, sizeof(smooth.canonical));
+    SDL_memcpy(fb, smooth.base, sizeof(smooth.base));
+    smooth.saved_queue = g->drawq;
+    g->drawq = smooth.queue;
+    if (same_scene) {
+        if (smooth.have_queue) {
+            smooth_queue_positions(&g->drawq, elapsed_ns);
+        }
+        g->cam_x = smooth_lerp(smooth.cam_x, cam_x, elapsed_ns);
+        g->cam_y = smooth_lerp(smooth.cam_y, cam_y, elapsed_ns);
+        for (i = 0; i < g->objects->count; i++) {
+            pk_object *o = g->objects->items[i];
+            if (o->smooth_valid && o->image == o->smooth_image && o->frames == o->smooth_frames &&
+                ((o->flags ^ o->smooth_flags) & ~((Uint32)PK_OBJ_ANIMATING)) == 0) {
+                o->smooth_current_x = o->x;
+                o->smooth_current_y = o->y;
+                o->x = smooth_lerp(o->smooth_x, o->x, elapsed_ns);
+                o->y = smooth_lerp(o->smooth_y, o->y, elapsed_ns);
+            } else {
+                o->smooth_valid = false;
+            }
+        }
+    }
+    g->curtain = smooth.curtain;
+    g->curtain_w = smooth_lerp(smooth.previous_curtain_w, smooth.curtain_w, elapsed_ns);
+    if (g->curtain_w > 0 && g->curtain == PK_CURTAIN_NONE) {
+        g->curtain = PK_CURTAIN_OPEN;
+    }
+    if (pk_pause_active()) {
+        pk_pause_render(g);
+    } else {
+        render(g);
+    }
+    SDL_memcpy(out, fb, sizeof(smooth.base));
+    if (same_scene) {
+        for (i = 0; i < g->objects->count; i++) {
+            pk_object *o = g->objects->items[i];
+            if (o->smooth_valid) {
+                o->x = o->smooth_current_x;
+                o->y = o->smooth_current_y;
+            }
+        }
+    }
+    g->cam_x = cam_x;
+    g->cam_y = cam_y;
+    g->curtain = curtain;
+    g->curtain_w = curtain_w;
+    g->render_pass = render_pass;
+    g->drawq = smooth.saved_queue;
+    SDL_memcpy(fb, smooth.canonical, sizeof(smooth.canonical));
+}
+
 bool pk_game_tick(pk_game *g)
 {
     bool drawn = false;

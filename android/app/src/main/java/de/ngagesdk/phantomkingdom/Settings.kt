@@ -28,6 +28,7 @@ data class AppSettings(
     val arenaPass: String = "",
     /** Vibration when the game takes a tap, swipe or back gesture; off = --no-haptics. */
     val haptics: Boolean = true,
+    val smooth: Boolean = true,
     val theme: ThemeMode = ThemeMode.LIGHT,
 ) {
     /** The address the game connects to; falls back to the default when the field is empty. */
@@ -54,9 +55,7 @@ fun isValidHost(host: String): Boolean {
 const val ARENA_USER_MAX = 31
 const val ARENA_PASS_MAX = 63
 
-class SettingsStore private constructor(context: Context) {
-    private val prefs: SharedPreferences =
-        context.applicationContext.getSharedPreferences("settings", Context.MODE_PRIVATE)
+class SettingsStore internal constructor(private val prefs: SharedPreferences) {
     private val state = MutableStateFlow(load())
     val settings: StateFlow<AppSettings> = state.asStateFlow()
 
@@ -68,6 +67,7 @@ class SettingsStore private constructor(context: Context) {
             .putString("arena_user", s.arenaUser)
             .putString("arena_pass", s.arenaPass)
             .putBoolean("haptics", s.haptics)
+            .putBoolean("smooth", s.smooth)
             .putString("theme", s.theme.name)
             .apply()
     }
@@ -79,6 +79,7 @@ class SettingsStore private constructor(context: Context) {
             arenaUser = prefs.getString("arena_user", null) ?: d.arenaUser,
             arenaPass = prefs.getString("arena_pass", null) ?: d.arenaPass,
             haptics = prefs.getBoolean("haptics", d.haptics),
+            smooth = prefs.getBoolean("smooth", d.smooth),
             theme = runCatching { ThemeMode.valueOf(prefs.getString("theme", null) ?: "") }.getOrDefault(d.theme),
         )
     }
@@ -86,7 +87,11 @@ class SettingsStore private constructor(context: Context) {
     companion object {
         @Volatile private var instance: SettingsStore? = null
         fun get(context: Context): SettingsStore =
-            instance ?: synchronized(this) { instance ?: SettingsStore(context).also { instance = it } }
+            instance ?: synchronized(this) {
+                instance ?: SettingsStore(
+                    context.applicationContext.getSharedPreferences("settings", Context.MODE_PRIVATE),
+                ).also { instance = it }
+            }
     }
 }
 

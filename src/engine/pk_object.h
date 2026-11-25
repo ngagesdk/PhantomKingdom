@@ -73,6 +73,10 @@ struct pk_object
     Uint32 frames;         /* +0x98 sprite frame table (original address) */
     void *user;            /* engine extension: per-object data owned by the object */
     void (*destroy)(pk_object *self);
+
+    int smooth_x, smooth_y, smooth_current_x, smooth_current_y, smooth_image;
+    Uint32 smooth_frames, smooth_flags;
+    bool smooth_valid;
 };
 
 typedef struct pk_object_list

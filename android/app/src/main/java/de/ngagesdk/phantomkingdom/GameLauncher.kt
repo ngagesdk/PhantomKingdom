@@ -6,6 +6,7 @@
  *                                   be localhost)
  *   --arena-user / --arena-pass     when set on the start screen
  *   --no-haptics                    when vibration is turned off
+ *   --smooth                        when smooth rendering is enabled
  * The game stores host, user and password in its arena.cfg
  * (pk_arena_set_account in src/game/scene_arena.c).
  *
@@ -31,6 +32,7 @@ object GameLauncher {
         if (settings.arenaUser.isNotBlank()) { add("--arena-user"); add(settings.arenaUser.trim()) }
         if (settings.arenaPass.isNotEmpty()) { add("--arena-pass"); add(settings.arenaPass) }
         if (!settings.haptics) add("--no-haptics")
+        if (settings.smooth) add("--smooth")
     }
 
     fun launch(context: Context, settings: AppSettings): Result {

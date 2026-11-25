@@ -158,6 +158,24 @@ fun SettingsScreen(
             }
         }
 
+        SectionTitle("Game")
+        PlainCard {
+            Row(
+                Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Smooth rendering", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Smooths movement and transitions without changing game speed. Applies next time you start the game.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Switch(checked = settings.smooth, onCheckedChange = { on -> onChange { it.copy(smooth = on) } })
+            }
+        }
+
         SectionTitle("Touch")
         PlainCard {
             Row(

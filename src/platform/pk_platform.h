@@ -3,6 +3,7 @@
 #define PK_PLATFORM_H
 
 #include <stdbool.h>
+#include <SDL3/SDL_stdinc.h>
 
 typedef struct pk_platform_config
 {
@@ -16,6 +17,7 @@ void pk_platform_quit(void);
 
 /* Uploads the frame buffer and presents it. */
 void pk_platform_present(void);
+void pk_platform_present_frame(const Uint32 *pixels);
 
 /* Writes the frame buffer to a BMP (F12 screenshots, tests). */
 bool pk_platform_screenshot(const char *path);
