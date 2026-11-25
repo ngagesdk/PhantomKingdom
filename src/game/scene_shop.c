@@ -56,7 +56,7 @@ static void load_pos(pk_game *g)
 {
     g->list_top = g->list_f8;
     g->cursor = g->list_fc;
-}                                                                  /* FUN_10029c10 */
+} /* FUN_10029c10 */
 static void clear_pos(pk_game *g) { g->list_f8 = g->list_fc = 0; } /* FUN_10029bec */
 
 /* FUN_100284ec: shows entry idx of n with `page` rows visible */

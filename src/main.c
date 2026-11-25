@@ -34,6 +34,7 @@
 typedef struct options
 {
     const char *data;
+    const char *pref; /* --pref DIR */
     const char *imei;
     const char *screenshot;
     const char *arena_host;
@@ -60,6 +61,7 @@ static void usage(void)
     SDL_Log("Pocket Kingdom (reimplementation) " PK_VERSION "\n"
             "usage: pocketkingdom [options]\n"
             "  --data DIR          folder with your game files (6rah.app, pokekin.mbm, *.dat, *.pcm)\n"
+            "  --pref DIR          folder for save.dat and arena.cfg (default: the user's preference folder)\n"
             "  --lang en|fr|de|it|es\n"
             "  --scale N           window scale (default: fit the screen)\n"
             "  --fullscreen\n"
@@ -120,6 +122,8 @@ static bool parse_args(int argc, char **argv, options *o)
             NEED(o->scale = SDL_atoi(next));
         } else if (!SDL_strcmp(a, "--audio-rate")) {
             NEED(o->audio_rate = SDL_atoi(next));
+        } else if (!SDL_strcmp(a, "--pref")) {
+            NEED(o->pref = next);
         } else if (!SDL_strcmp(a, "--imei")) {
             NEED(o->imei = next);
         } else if (!SDL_strcmp(a, "--frames")) {
@@ -309,6 +313,7 @@ int main(int argc, char **argv)
         PK_WARN("SDL_net: %s (online features disabled)", SDL_GetError());
     }
 
+    pk_fs_set_pref_dir(opt.pref);
     if (!pk_fs_init(opt.data)) {
         const char *dir = opt.data ? opt.data : "(searched default locations)";
 #ifdef SDL_PLATFORM_ANDROID

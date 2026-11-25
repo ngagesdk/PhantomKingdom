@@ -13,6 +13,9 @@
  *   6  search   [2] area, name @4                (answer 134: rivals)
  * and answers other players' scouting (7 -> 135) and attacks
  * (9 -> 137) with its defense party (FUN_100661e0 / FUN_100669a8).
+ * Byte 1 of a message is a tag from one counter (game+0x1aa10) that the
+ * answer repeats. Its own scouting and attacks on rival kingdoms are in
+ * scene_map.c. g_rivals keeps the last answer 134 (game+0x1aa18).
  * Message layouts: PhantomLink docs/ARENA.md. */
 #include "audio/pk_audio.h"
 #include "core/pk_app.h"
@@ -110,15 +113,21 @@ static void put_name(Uint8 *at, const char *name)
     SDL_strlcpy((char *)at, name, 16);
 }
 
-static void send_simple(int type, int b2, int len, int name_at)
+/* the tag of the next message (game+0x1aa10, taken and counted on) */
+int pk_arena_next_tag(void)
+{
+    return (Uint8)(s_seq++);
+}
+
+static bool send_simple(int type, int b2, int len, int name_at, int tag)
 {
     Uint8 m[32];
     SDL_zeroa(m);
     m[0] = (Uint8)type;
-    m[1] = (Uint8)(++s_seq);
+    m[1] = (Uint8)tag;
     m[2] = (Uint8)b2;
     put_name(m + name_at, pk_online_user());
-    pk_online_send(m, len);
+    return pk_online_send(m, len);
 }
 
 void pk_arena_send_online(pk_game *g)
@@ -126,7 +135,7 @@ void pk_arena_send_online(pk_game *g)
     Uint8 m[24];
     SDL_zeroa(m);
     m[0] = 1;
-    m[1] = (Uint8)(++s_seq);
+    m[1] = (Uint8)pk_arena_next_tag();
     m[2] = (Uint8)g->world.current_area;
     m[3] = (Uint8)(g->world.h_4e4 & 3);    /* castle */
     m[4] = (Uint8)(g->world.h_4e8 & 0xff); /* transporter */
@@ -139,14 +148,19 @@ void pk_arena_send_online(pk_game *g)
 void pk_arena_send_moved(pk_game *g)
 {
     if (g->arena_online) {
-        send_simple(5, g->world.current_area, 20, 4);
+        send_simple(5, g->world.current_area, 20, 4, pk_arena_next_tag());
     }
 }
-void pk_arena_send_search(pk_game *g)
+
+/* FUN_10065ff0: 6, the area search; the tag the answer 134 repeats, or
+ * -1 when it could not be sent */
+int pk_arena_send_search(pk_game *g)
 {
-    if (g->arena_online) {
-        send_simple(6, g->world.current_area, 20, 4);
+    int tag = pk_arena_next_tag();
+    if (!g->arena_online || !send_simple(6, g->world.current_area, 20, 4, tag)) {
+        return -1;
     }
+    return tag;
 }
 
 static int s_defending; /* defence (see below): 1 message kept, 2 battle queued */
@@ -162,11 +176,12 @@ void pk_arena_go_offline(pk_game *g)
     if (s_defending == 1) {
         pk_arena_attack_done(g);
     }
-    send_simple(3, 0, 20, 4);
+    send_simple(3, 0, 20, 4, pk_arena_next_tag());
     pk_online_update();
     pk_online_stop();
     g->arena_online = 0;
     g_rival_count = 0;
+    pk_rivals_reset(g, true); /* FUN_100723e0 */
 }
 
 /* the defense party's units in the 12-byte form of messages 9 / 137 */
@@ -301,7 +316,8 @@ static void handle(pk_game *g, const Uint8 *m, int n)
 {
     int i;
     switch (m[0]) {
-    case 134: /* rivals in the area */
+    case 134: /* rivals in the area (0x10067f9c): kept for the search's
+               * report, the waiting search (kind 4) ends */
         g_rival_count = 0;
         g_rival_area = g->world.current_area;
         for (i = 0; i < PK_RIVALS_MAX && 4 + i * 20 + 20 <= n; i++) {
@@ -312,9 +328,9 @@ static void handle(pk_game *g, const Uint8 *m, int n)
             SDL_memcpy(g_rivals[g_rival_count].name, e, 16);
             g_rivals[g_rival_count].name[16] = 0;
             SDL_memcpy(g_rivals[g_rival_count].look, e + 16, 4);
-            g_rivals[g_rival_count].scouted = 0;
             g_rival_count++;
         }
+        pk_event_answered(g, 4, m[1]);
         PK_INFO("arena: %d rival kingdom(s) in area %d", g_rival_count, g_rival_area);
         break;
     case 7:
@@ -385,6 +401,10 @@ void pk_arena_tick(pk_game *g)
     if (pk_online_get_state() != PK_ONLINE_READY) {
         g->arena_online = 0;
         g_rival_count = 0;
+        if (s_defending == 1) {
+            pk_arena_attack_done(g);
+        }
+        pk_rivals_reset(g, true); /* FUN_100723e0 */
         s_lost = 1;
         return;
     }
@@ -393,7 +413,7 @@ void pk_arena_tick(pk_game *g)
     }
     if (++s_keepalive >= 165) {
         s_keepalive = 0;
-        send_simple(2, 0, 20, 4);
+        send_simple(2, 0, 20, 4, pk_arena_next_tag());
     }
     while ((n = pk_online_poll(m, sizeof(m))) > 0) {
         handle(g, m, n);
@@ -540,8 +560,9 @@ void pk_mode_arena(pk_game *g)
 /* ---- chat (Map > Search > Chat; message 18, FUN_10066f14) --------- */
 static struct
 {
-    int cursor, to, replying;
-    int team; /* the messenger party (+0xec) */
+    int replying;
+    char to[17]; /* the recipient, empty when the base cannot be written to */
+    int team;    /* the messenger party (+0xec) */
 } s_chat;
 static char s_chat_text[80];
 
@@ -550,11 +571,12 @@ bool pk_chat_pending(void)
     return s_inbox_n > 0;
 }
 
-/* Map > Search > Chat: the base chosen (a rival kingdom, or -1 for one
- * that cannot be written to) and the party that carries the letter */
-void pk_chat_compose(int rival, int team)
+/* Map > Search > Chat: the kingdom of the base chosen (NULL for an enemy
+ * base, which cannot be written to) and the party that carries the
+ * letter */
+void pk_chat_compose(const char *to, int team)
 {
-    s_chat.cursor = rival;
+    SDL_strlcpy(s_chat.to, to ? to : "", sizeof(s_chat.to));
     s_chat.team = team;
     s_chat_text[0] = 0;
     s_chat.replying = 1;
@@ -754,25 +776,15 @@ void pk_chat_update(pk_object *o, pk_game *g)
                 g->key_code = PK_SC_5; /* touch: Reply */
             }
             if (g->key_code == PK_SC_5 || g->key_code == PK_SC_BACK) {
-                int i, to = -1;
                 bool reply = g->key_code == PK_SC_5;
-                for (i = 0; i < g_rival_count; i++) {
-                    if (!SDL_strcmp(g_rivals[i].name, s_inbox[0].from)) {
-                        to = i;
-                    }
-                }
-                if (reply && to < 0 && g_rival_count < PK_RIVALS_MAX) { /* answer even if not seen in the area */
-                    to = g_rival_count++;
-                    SDL_zero(g_rivals[to]);
-                    SDL_strlcpy(g_rivals[to].name, s_inbox[0].from, sizeof(g_rivals[to].name));
-                    g_rivals[to].look[1] = g_rivals[to].look[2] = 5;
+                if (reply) { /* the reply goes to the sender, also one not seen in the area */
+                    SDL_strlcpy(s_chat.to, s_inbox[0].from, sizeof(s_chat.to));
                 }
                 SDL_memmove(s_inbox, s_inbox + 1, sizeof(s_inbox[0]) * 3);
                 s_inbox_n--;
                 pk_audio_play_sfx(reply ? 0 : 1);
                 if (reply) { /* the messenger party (0x1004faec), then the
                               * writing screen (0x10031e9c): states 10, 0 */
-                    s_chat.cursor = to;
                     s_chat_text[0] = 0;
                     s_chat.replying = 1;
                     pk_object_kill_others(g, o);
@@ -789,10 +801,9 @@ void pk_chat_update(pk_object *o, pk_game *g)
             }
             break;
         }
-        if (s_chat.cursor >= 0 && s_chat.cursor < g_rival_count) { /* the recipient */
-            pk_drawq_text_utf8(&g->drawq, g_rivals[s_chat.cursor].name, 0xe, 0xae, 0, PK_ALIGN_LEFT, 1, PK_FONT_DENSE);
-            pk_drawq_text_utf8(&g->drawq, g_rivals[s_chat.cursor].name, 0xd, 0xad, 0xFFFFFFu, PK_ALIGN_LEFT, 1,
-                               PK_FONT_DENSE);
+        if (s_chat.to[0]) { /* the recipient */
+            pk_drawq_text_utf8(&g->drawq, s_chat.to, 0xe, 0xae, 0, PK_ALIGN_LEFT, 1, PK_FONT_DENSE);
+            pk_drawq_text_utf8(&g->drawq, s_chat.to, 0xd, 0xad, 0xFFFFFFu, PK_ALIGN_LEFT, 1, PK_FONT_DENSE);
         }
         pk_game_mestext(g, 0x151, 0x3c, 0x90, 0, PK_ALIGN_CENTER, 1, PK_FONT_DENSE);
         chat_draw_text(g, typing ? pk_input_text() : s_chat_text, typing);
@@ -843,8 +854,8 @@ void pk_chat_update(pk_object *o, pk_game *g)
             pk_input_text_append(s_chat_text);
         } else if (g->key_code == PK_SC_5 && s_chat_text[0]) {
             /* map state 0x23: sent only to a rival kingdom */
-            if (s_chat.cursor >= 0 && s_chat.cursor < g_rival_count) {
-                chat_send(g, g_rivals[s_chat.cursor].name, s_chat_text);
+            if (s_chat.to[0]) {
+                chat_send(g, s_chat.to, s_chat_text);
             }
             s_chat_text[0] = 0;
             pk_audio_play_sfx(0);

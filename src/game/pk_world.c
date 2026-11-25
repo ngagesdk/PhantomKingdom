@@ -4,6 +4,7 @@
 #include "core/pk_fs.h"
 #include "core/pk_log.h"
 #include "engine/pk_game.h"
+#include "game/pk_arena_game.h"
 #include "game/pk_data.h"
 #include "net/pk_identity.h"
 
@@ -443,9 +444,12 @@ bool pk_world_load(pk_game *g)
         PK_WARN("save: save.dat is damaged, or a phone save whose IMEI was not given with --imei");
     }
     if (ok) {
-        /* a party left busy by an online mission whose answer never came
-         * (the session ended first) is free again: no event holds it */
+        /* port: a save made while online may hold rival bases and online
+         * missions (the original drops them when it goes offline,
+         * FUN_100723e0); a party left busy by an online mission whose
+         * answer never came is free again: no event holds it */
         int t, i;
+        pk_rivals_reset(g, false);
         for (t = 0; t < PK_TEAMS; t++) {
             bool held = false;
             for (i = 0; i < PK_EVENTS; i++) {

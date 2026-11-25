@@ -32,7 +32,7 @@ phone's IMEI: `--imei <15 digits>`.
     pocketkingdom --data /path/to/6rah
 
 Options: `--lang en|fr|de|it|es`, `--scale N`, `--fullscreen`,
-`--audio-rate HZ`, `--no-audio`, `--no-haptics`, `--imei DIGITS`,
+`--audio-rate HZ`, `--no-audio`, `--no-haptics`, `--imei DIGITS`, `--pref DIR`,
 `--arena-host HOST --arena-test USER PASSWORD`; `--help` lists all.
 
 ## Keyboard

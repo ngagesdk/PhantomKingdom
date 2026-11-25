@@ -17,7 +17,7 @@ which is how the port connects.
 | SNAP lobby/room flow: Play Now "Scrimmage" or "Ranked" (lobby and room of that name) (`net/pk_online.c`) | done |
 | Title "N-Gage Arena": connect screen, kingdom played online (`game/scene_arena.c`) | done |
 | Game messages: online (1), keep alive (2), offline (3), moved (5), area search (6 / 134) | done |
-| Rival kingdoms: scout (7 / 135), attack (9 / 137, battle against the defender's party, 10) | done |
+| Rival kingdoms: rival bases from the area search (6 / 134), scout (7 / 135), attack (9 / 137, 10 and its echo, seeded battle against the defender's party), "nobody home" / "moved" reports | done |
 | Answering other players' scouting and attacks with the defense party | done |
 | Chat (18 / 146): Map > Search > Chat, typed on the keyboard; incoming messages pop up | done |
 | Global Auction: Shop > Global Auction while online; bid (14 / 142, 15 / 143), exhibit (13 / 141), check exhibits and bids with collection of sales, won items and refunds (16 / 144) (`game/scene_auction.c`) | done |
@@ -63,5 +63,32 @@ you are online your own defense party (Party > Defense) answers attacks.
     pocketkingdom --data <dir> --arena-host <server> --arena-test <user> <password>
 
 The log reports the Community login, the SNAP login and the room.
-`--frames N --realtime` runs a client headless at about real speed, so
-two clients can play against each other on one machine.
+`--frames N --realtime` runs a client headless (each tick about 10 ms
+apart), and `--pref DIR` gives each client its own folder for
+`save.dat`, `arena.cfg` and `identity.cfg`, so two clients can play
+against each other on one machine:
+
+    pocketkingdom --data <dir> --pref alice --arena-host <server> --arena-user alice --arena-pass pw1 --frames 5000 --realtime --keys ...
+    pocketkingdom --data <dir> --pref bob --arena-host <server> --arena-user bob --arena-pass pw2 --frames 5000 --realtime --keys ...
+
+## Rival kingdoms
+
+As in the original (details in [RE_NOTES.md](RE_NOTES.md), "Rival bases
+and attacks"):
+
+- An online area search sends 6 and ends when the answer 134 is in. Its
+  report turns the kingdoms of the answer into rival bases: formation
+  slots with word 47 = 1, counted in area word 1, which replace the rival
+  bases of the last search.
+- Scout sends 7 and Attack sends 9 (with the battle seed in byte 3); the
+  mission ends as soon as the answer is in, or after 110 frames. An attack
+  answered with the defender's party sends 10 at once and waits for the
+  server to send it back.
+- Without an answer, or with result 253 / 254, the report says the
+  kingdom has moved and its base goes; result 255 ("nobody home") leaves
+  the base.
+- Both games seed the generator with the attacker's seed before the
+  battle. As in the original, the two games can still play the battle out
+  differently.
+- Going offline (or losing the connection) drops the rival bases and the
+  online missions and frees every party; loading a save drops them, too.

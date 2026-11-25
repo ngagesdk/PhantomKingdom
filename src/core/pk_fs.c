@@ -6,6 +6,18 @@
 
 static char g_data_dir[PK_PATH_MAX];
 static char g_pref_dir[PK_PATH_MAX];
+static char g_pref_override[PK_PATH_MAX];
+
+void pk_fs_set_pref_dir(const char *dir)
+{
+    size_t n;
+    SDL_strlcpy(g_pref_override, dir ? dir : "", sizeof(g_pref_override));
+    n = SDL_strlen(g_pref_override);
+    if (n > 0 && n + 1 < sizeof(g_pref_override) && g_pref_override[n - 1] != '/' && g_pref_override[n - 1] != '\\') {
+        g_pref_override[n] = '/';
+        g_pref_override[n + 1] = '\0';
+    }
+}
 static pk_language g_lang = PK_LANG_ENGLISH;
 
 static const char *const k_lang_dirs[PK_LANG_COUNT] = {
@@ -185,7 +197,12 @@ bool pk_fs_init(const char *explicit_dir)
     size_t b, s;
 
     g_data_dir[0] = '\0';
-    pref = SDL_GetPrefPath("ngagesdk", "PocketKingdom");
+    if (g_pref_override[0]) {
+        SDL_CreateDirectory(g_pref_override);
+        pref = SDL_strdup(g_pref_override);
+    } else {
+        pref = SDL_GetPrefPath("ngagesdk", "PocketKingdom");
+    }
     if (pref) {
         SDL_strlcpy(g_pref_dir, pref, sizeof(g_pref_dir));
         SDL_free(pref);

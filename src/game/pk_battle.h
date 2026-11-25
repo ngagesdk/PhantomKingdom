@@ -39,7 +39,7 @@ typedef struct pk_battle
 
     /* port */
     int started;                  /* game+0x458 */
-    int trap_done;                /* port: the trap has gone off */
+    int trap_done;                /* port: 0 waiting, 1 over, 2 cards, 3 trap 0 drop, 4 traps 1/2/4/5, 5 trap 6, 6 trap 7 */
     int trap_revealed;            /* game+0x4f8 = 1: the trap cards have turned */
     int special_msg;              /* port: frames the special move's panel stays (game+0x464 != 0xff) */
     int special_rs, special_slot; /* the speaking unit: record side, slot */

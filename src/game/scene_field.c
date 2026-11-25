@@ -91,7 +91,9 @@ void pk_mode_field(pk_game *g)
         /* the kingdom screen hands finished missions to 0x10028538 */
         if (root && root->update == pk_kingdom_update && root->state == 4 && root->work[0] == 0 &&
             g->curtain == PK_CURTAIN_NONE && (ev = pk_event_finished(g)) != 0xff) {
-            pk_event_handle(g, ev);
+            if (!pk_event_take_special(g, ev, false)) {
+                pk_event_handle(g, ev);
+            }
         }
         break;
     }

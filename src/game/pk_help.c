@@ -17,6 +17,7 @@
 #include "core/pk_fs.h"
 #include "core/pk_log.h"
 #include "game/pk_data.h"
+#include "game/pk_scenes.h"
 #include "game/pk_world.h"
 #include "gfx/pk_font.h"
 #include "gfx/pk_gfx.h"
@@ -48,6 +49,7 @@ static struct
     bool page_break[HELP_MAXL]; /* a new page starts at this line */
     int delay;
     bool tall; /* detail views: a near full-screen window */
+    int area;  /* kind 0: the area of the open pop-up, else -1 (window +0x78) */
 } s_help;
 
 /* game+0x574: the word put in place of "XXX" (a unit's new class, ...) */
@@ -203,9 +205,11 @@ static bool open_file(const char *name, bool new_page)
     return true;
 }
 
-/* kind 0 pop-ups already shown (game+0x174 + area * 8 in the
- * original's save); the port keeps them in popups.dat next to the save */
-static Uint8 s_popup_seen[64];
+/* kind 0 pop-ups already shown: [area] popupa (game+0x174 + area * 8 in
+ * the original's save), [64 + area] popupb (+0x178 + area * 8); the port
+ * keeps them in popups.dat next to the save (older files hold only the
+ * first 64 bytes) */
+static Uint8 s_popup_seen[128];
 static bool s_popup_loaded;
 
 static void popups_load(void)
@@ -239,16 +243,21 @@ void pk_help(pk_game *g, int kind, int id)
     s_help.line_count = 0;
     s_help.page = 0;
     s_help.tall = false;
+    s_help.area = -1;
     if (kind == 0) {
+        /* FUN_10071c74: nothing once popupb has been shown; FUN_1005ab64:
+         * popupa the first time, popupb after; the window (0x1005af94)
+         * marks the one it opens */
         popups_load();
-        if (id >= (int)sizeof(s_popup_seen) || s_popup_seen[id]) {
+        if (id >= 64 || s_popup_seen[64 + id]) {
             return;
         }
-        SDL_snprintf(name, sizeof(name), "popupa%03d.txt", id);
+        SDL_snprintf(name, sizeof(name), "popup%c%03d.txt", s_popup_seen[id] ? 'b' : 'a', id);
         if (!open_file(name, true)) {
             return;
         }
-        s_popup_seen[id] = 1;
+        s_popup_seen[s_popup_seen[id] ? 64 + id : id] = 1;
+        s_help.area = id;
         pk_fs_save_pref("popups.dat", s_popup_seen, sizeof(s_popup_seen));
     } else if (kind == 1) {
         if (id < (int)sizeof(g->world.help_seen)) {
@@ -397,6 +406,13 @@ void pk_help_input(pk_game *g)
         s_help.page++;
         if (page_start(s_help.page, &n) < 0 || n == 0) {
             s_help.active = false;
+            /* 0x1005b38c: closing an area pop-up while its popupb has
+             * not been shown starts event kind 6 (the area as its team),
+             * which brings popupb up on the map later */
+            if (s_help.area >= 0 && !s_popup_seen[64 + s_help.area]) {
+                pk_event_start(g, 6, s_help.area);
+            }
+            s_help.area = -1;
             pk_help_show_opened_area(g); /* 0x1005aaa0: the next opened area */
         }
         s_help.delay = 3;

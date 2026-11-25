@@ -120,6 +120,11 @@ static void box(pk_object *o, int x, int y, int w, int h)
 }
 static int dir(const pk_object *o, int v) { return (o->flags & FLIP) ? -v : v; }
 
+static void damage(pk_game *g, pk_object *u, int d);
+void pk_bu_damage(pk_game *g, pk_object *u, int d) { damage(g, u, d); }
+void pk_bu_status_set(const pk_object *o, int b) { status_set(o, b); }
+void pk_bu_status_clr(const pk_object *o, int b) { status_clr(o, b); }
+
 /* FUN_10008af4 with FUN_10010174: the damage number, then the HP */
 static void damage(pk_game *g, pk_object *u, int d)
 {
@@ -584,7 +589,7 @@ static pk_object *spawn_attack(pk_game *g, int state, const pk_object *u, int x,
 static pk_object *target(pk_game *g, pk_object *o)
 {
     int er = rs(o) ^ 1, mode, best = 0xff, v, i;
-    int(*e)[23] = pk_b.rec[er];
+    int (*e)[23] = pk_b.rec[er];
     if (o->target != 0xff) {
         int *r = e[o->target % 6];
         if (r[0] == 0xff || r[22] != 0) {
@@ -595,7 +600,7 @@ static pk_object *target(pk_game *g, pk_object *o)
     if (o->state == 3) {
         /* support: the most hurt ally decides the rule (as written, the
          * lookup uses the type of the side's last record) */
-        int(*a)[23] = pk_b.rec[rs(o)], low = 0xff, who = 0xff;
+        int (*a)[23] = pk_b.rec[rs(o)], low = 0xff, who = 0xff;
         pk_object *ally;
         for (i = 0; i < 6; i++) {
             int *r = a[i];
@@ -1249,4 +1254,14 @@ void pk_battle_unit_look(int type, Uint32 *frames, Uint32 *idle)
     const unit_class *c = class_of(type);
     *frames = c->frames;
     *idle = c->rest;
+}
+
+/* traps 1 and 2 (FUN_100056d4 / FUN_10005ba4 per attacker unit) */
+void pk_bu_trap_status(pk_game *g, pk_object *u, int trap)
+{
+    if (trap == 1) {
+        st_poison(g, u, 0x20); /* FUN_10007b28 */
+    } else {
+        st_seal(g, u); /* FUN_10007f48 */
+    }
 }

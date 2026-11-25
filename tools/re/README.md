@@ -10,6 +10,7 @@ everything they derive into a work directory outside the repository.
 | `e32.py` | E32 header, import and relocation parser |
 | `annotate.py` | resolves literal-pool loads (`DAT_xxx`) to values and strings |
 | `armtail.py` | decodes the few code tails Ghidra leaves undisassembled |
+| `armdis.py` | ARMv5TE disassembler with literal values, labels and the port's names for each address |
 | `ghidra/PKDump.java` | labels, analysis, decompiles every function |
 | `ghidra/PKFix.java` | clears wrong no-return flags and re-disassembles call sites |
 | `ghidra/DecompAt.java`, `ListAt.java` | decompile / list single addresses |

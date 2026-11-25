@@ -69,11 +69,59 @@ void pk_events_tick(pk_game *g) /* FUN_10070b20, mode 1 */
     int i;
     for (i = 0; i < PK_EVENTS; i++) {
         int *e = g->world.events[i];
-        if (e[1] == 1 && --e[0] < 1) {
+        /* an online mission (byte [11] = 1) also ends as soon as its
+         * answer is in ([12] = 0) */
+        if (e[1] == 1 && (--e[0] < 1 || ((e[11] & 0xff) == 1 && e[12] == 0))) {
             e[0] = 0;
             e[1] = 3; /* the original passes 2 (arrival message) on to 3 */
         }
     }
+}
+
+/* FUN_10070da0: an online mission waits for the answer to message `tag`
+ * ([11] = 1, [12] = 1, [5] = tag), at most the time of table 0x100aed28 */
+static void event_wait(pk_game *g, int ev, int tag)
+{
+    static const int k_wait[12] = { 5, 110, 5, 110, 110, 5, 5, 5, 5, 110, 5, 5 };
+    int *e;
+    if (ev < 0 || ev >= PK_EVENTS) {
+        return;
+    }
+    e = g->world.events[ev];
+    e[11] = 1;
+    e[12] = 1;
+    e[0] = e[2] >= 0 && e[2] < 12 ? k_wait[e[2]] : 5;
+    e[5] = tag & 0xff;
+}
+
+void pk_event_answered(pk_game *g, int kind, int tag) /* FUN_10070f24 */
+{
+    int i;
+    for (i = 0; i < PK_EVENTS; i++) {
+        int *e = g->world.events[i];
+        if (e[2] == kind && e[12] == 1 && e[5] == (tag & 0xff)) {
+            e[12] = 0;
+        }
+    }
+}
+
+/* Before a finished event goes to 0x10028538 the kingdom (0x10024ba4)
+ * and the map (0x1003f148) take kinds 6 and 7 themselves: kind 6 shows
+ * the current area's pop-up again on the map (FUN_10071c74(0, area): its
+ * popupb) and is only dropped in the kingdom; kind 7 shows trigger 0x22.
+ * True when the event was taken. */
+bool pk_event_take_special(pk_game *g, int ev, bool map)
+{
+    int kind = g->world.events[ev][2];
+    if (kind == 6 && map) {
+        pk_help(g, 0, g->world.current_area);
+    } else if (kind == 7) {
+        pk_help(g, 1, 0x22);
+    } else if (kind != 6) {
+        return false;
+    }
+    pk_event_clear(g, ev);
+    return true;
 }
 
 int pk_event_finished(pk_game *g) /* FUN_10070e6c */
@@ -136,10 +184,12 @@ static struct
     int valid, area, leader, nspot, nbase, nmat;
     int spot[12];
     char mat[12][48];
-    int kind; /* 0 search, 1 scouted spot, 2 scouted base */
+    int kind; /* 0 search, 1 scouted spot, 2 scouted base, 3 a rival kingdom is not there (0x10028fc4) */
     int sc_known, sc_spot, sc_fights, sc_field, sc_level, sc_power, sc_hp;
     char sc_name[17]; /* a rival kingdom (FUN_100590c8 shows its name in place of 0x38) */
-    int sc_gone;      /* port: the rival was not found */
+    int nrival;       /* rival bases the search added (area word 1) */
+    int why;          /* kind 3: +0x1c, 1 nobody home (result 255), 2 the kingdom moved */
+    int from_kingdom; /* kind 3: the kingdom screen handed the event (+0x28 == 1) */
 } s_srch;
 
 static void u16_to_utf8(const Uint16 *s, char *out, int cap)
@@ -163,6 +213,22 @@ static void u16_to_utf8(const Uint16 *s, char *out, int cap)
     }
     out[n] = 0;
 }
+
+/* port: the original's map state 0x31 (0x1003dea8); the port's own 0x31
+ * is the way back to the kingdom */
+#define MAP_REENTER 0xc3
+
+/* the rival table (*(game+0x9060)), see "Rival kingdoms" below */
+typedef struct rival_entry
+{
+    char name[17];
+    Uint8 look[4]; /* size, transporter, mark, colour; 0xff = none */
+} rival_entry;
+static rival_entry s_rtab[PK_RIVALS_MAX];
+static const rival_entry *rival_of(const pk_game *g, int slot);
+static void rivals_forget(pk_game *g);
+static void rival_seed(pk_game *g, int seed);
+static char s_rival_name[17];
 
 /* ---- the area search's report screen (0x10059514) ------------------ */
 /* the magic circle (0x1005f080: image 0x4c, frame 0 over background 0x58,
@@ -280,10 +346,6 @@ static void scout_page(pk_game *g)
     }
     if (s_srch.sc_name[0]) {
         pk_drawq_text_utf8(&g->drawq, s_srch.sc_name, 0x58, 0x78, 0, PK_ALIGN_CENTER, 1, PK_FONT_DENSE);
-        if (s_srch.sc_gone) {
-            pk_game_mestext(g, 0x35, 0x58, 0x8e, 0, PK_ALIGN_CENTER, 1, PK_FONT_DENSE);
-            return;
-        }
     } else {
         pk_game_mestext(g, 0x38, 0x58, 0x78, 0, PK_ALIGN_CENTER, 1, PK_FONT_DENSE);
     }
@@ -309,20 +371,37 @@ static void scout_page(pk_game *g)
     }
 }
 
-/* the rival kingdoms the server reported for the searched area (message
- * 134); the original keeps their count in area word 1, the port in
- * g_rival_count (see ui_dialog.c) */
+/* the rival bases the search added (online, from message 134) */
 static int srch_rivals(const pk_game *g)
 {
-    if (!g->arena_online || s_srch.kind != 0 || g_rival_area != s_srch.area) {
-        return 0;
+    (void)g;
+    return s_srch.kind == 0 ? SDL_clamp(s_srch.nrival, 0, PK_RIVALS_MAX) : 0;
+}
+
+/* 0x10028fc4 state 4: the kingdom is not there. +0x1c = 1 (result 255,
+ * nobody home): mestext 0x140 / 0x141; 2 (no answer, or 253 / 254: the
+ * kingdom moved): 0x142, its name, 0x143 */
+static void absent_page(pk_game *g)
+{
+    if (s_srch.why == 1) {
+        pk_game_mestext(g, 0x140, 0x58, 0xa0, 0, PK_ALIGN_CENTER, 1, PK_FONT_DENSE);
+        pk_game_mestext(g, 0x141, 0x58, 0xb4, 0, PK_ALIGN_CENTER, 1, PK_FONT_DENSE);
+    } else if (s_srch.why == 2) {
+        pk_game_mestext(g, 0x142, 0x58, 0x78, 0, PK_ALIGN_CENTER, 1, PK_FONT_DENSE);
+        pk_drawq_text_utf8(&g->drawq, s_srch.sc_name, 0x58, 0x8c, 0, PK_ALIGN_CENTER, 1, PK_FONT_DENSE);
+        pk_game_mestext(g, 0x143, 0x58, 0xa0, 0, PK_ALIGN_CENTER, 1, PK_FONT_DENSE);
+    } else {
+        pk_game_mestext(g, 0x13f, 0x58, 0x78, 0, PK_ALIGN_CENTER, 1, PK_FONT_DENSE);
     }
-    return SDL_clamp(g_rival_count, 0, PK_RIVALS_MAX);
 }
 
 static void srch_page(pk_game *g, int page)
 {
     int i, y = 0x8e;
+    if (s_srch.kind == 3) {
+        absent_page(g);
+        return;
+    }
     if (s_srch.kind != 0) {
         scout_page(g);
         return;
@@ -349,8 +428,8 @@ static void srch_page(pk_game *g, int page)
         }
         srch_heading(g, 140, n, 148, 0x78);
         for (i = 0; i < n && y < 0xd0; i++) {
-            if (g_rivals[i].name[0]) {
-                pk_drawq_text_utf8(&g->drawq, g_rivals[i].name, 0x58, y, 0, PK_ALIGN_CENTER, 1, PK_FONT_DENSE);
+            if (s_rtab[i].name[0]) {
+                pk_drawq_text_utf8(&g->drawq, s_rtab[i].name, 0x58, y, 0, PK_ALIGN_CENTER, 1, PK_FONT_DENSE);
                 y += 0xb;
             }
         }
@@ -420,14 +499,30 @@ static void srch_report_update(pk_object *o, pk_game *g)
             }
         }
         break;
-    default:
-        if (g->curtain == PK_CURTAIN_HELD) {
+    default: /* 0x1005a250: whichever screen handed the event, the map
+              * comes back (0x1003db80 state 0x31); 0x10028fc4 state 5 goes
+              * back to the kingdom when it handed the event */
+        if (g->curtain == PK_CURTAIN_HELD && s_srch.kind == 3 && s_srch.from_kingdom) {
             pk_object_kill_others(g, o);
             g->bg_visible = 1;
             g->dlg_result = 0;
-            o->counter = 0;
             s_srch.valid = 0;
-            pk_object_return(g, o);
+            o->counter = 0;
+            pk_object_return(g, o); /* 0x1002479c state 1 */
+            break;
+        }
+        if (g->curtain == PK_CURTAIN_HELD) {
+            pk_object_kill_others(g, o);
+            g->world.h_140 = 0;
+            pk_game_set_bg(g, 0, g->field_bg);
+            g->bg_visible = 1;
+            g->dlg_result = 0;
+            s_srch.valid = 0;
+            pk_object_return(g, o); /* drops the call frame */
+            o->work[0] = 0;
+            o->work[1] = 0;
+            o->update = pk_map_update;
+            o->state = MAP_REENTER;
         }
         break;
     }
@@ -442,8 +537,10 @@ static void report_open(pk_game *g)
         return;
     }
     if (root->update == pk_map_update) {
+        s_srch.from_kingdom = 0;
         pk_object_call(g, root, fn, 0, pk_map_update, 2);
     } else {
+        s_srch.from_kingdom = 1;
         pk_object_call(g, root, fn, 0, pk_kingdom_update, 1);
     }
     root->counter = 0;
@@ -544,11 +641,15 @@ static void search_resolve(pk_game *g, int ev)
     }
     pk_items_sort(g);
 
-    /* rival bases are forgotten; new spots and enemy bases */
-    ar[1] = 0;
+    /* new spots and enemy bases (FUN_10063f40 counts the places with the
+     * rival bases of the last search; online at most three enemy bases) */
     if (ar[0] + ar[1] + ar[2] + nbase > 12) {
         nbase = SDL_max(12 - (ar[0] + ar[1] + ar[2]), 0);
     }
+    /* 0x10059dd4: the rival bases of the last search are forgotten
+     * (FUN_1000c9b8) */
+    ar[1] = 0;
+    rivals_forget(g);
     if (nbase > 0) {
         int lim = ar[3] / 2, spots = area_spots(area), d = 0;
         if (ar[0] < spots && ar[0] < lim) {
@@ -560,6 +661,9 @@ static void search_resolve(pk_game *g, int ev)
             }
             ar[0] += d;
             found += d;
+        }
+        if (g->arena_online && ar[2] + nbase - d > 3) {
+            nbase = d + SDL_max(3 - ar[2], 0);
         }
         for (i = d; i < nbase; i++) {
             int slot = -1, s2, level;
@@ -582,16 +686,42 @@ static void search_resolve(pk_game *g, int ev)
             found++;
         }
     }
+    /* online: every kingdom of the answer 134 becomes a rival base
+     * (find type 2): a free formation slot with word 47 = 1 and word 43
+     * = its index in the rival table, which gets its name and look */
+    if (g->arena_online && g_rival_area == area) {
+        for (i = 0; i < g_rival_count && i < PK_RIVALS_MAX && g_rivals[i].name[0]; i++) {
+            int slot, *f;
+            for (slot = 0; slot < 0xc && g->world.formations[slot][43] != 0xffff; slot++) {
+            }
+            if (slot == 0xc) {
+                continue;
+            }
+            f = g->world.formations[slot];
+            f[47] = 1;
+            f[43] = ar[1];
+            f[48] = 0; /* port: the slot's answer byte (0xc0) */
+            SDL_strlcpy(s_rtab[ar[1]].name, g_rivals[i].name, sizeof(s_rtab[0].name));
+            SDL_memcpy(s_rtab[ar[1]].look, g_rivals[i].look, 4);
+            ar[1]++;
+            s_srch.nrival++;
+            found++;
+        }
+    }
     PK_DEBUG("area search: %d finds (agility %d, k %d, r %d)", found, agi, k, r);
 }
+
+static void rival_absent(pk_game *g, int team, int slot, int why);
 
 /* Scout result (FUN_10064494 + 0x100583bc): the party's summed agility
  * gives a level (<41, <81, <121, <161, more). A base becomes partly
  * (level 1-2) or fully (3+) known (formation word 45 = 1 / 2); a spot
- * tells how many fights remain before its boss once level > 0. */
-static void scout_resolve(pk_game *g, int ev)
+ * tells how many fights remain before its boss once level > 0. A rival
+ * base (type 2) that did not answer, or answered above 252, is reported
+ * as moved (0x10028fc4 with +0x1c = 2); true then. */
+static bool scout_resolve(pk_game *g, int ev)
 {
-    int *e = g->world.events[ev], team = e[3], type = e[7], idx = e[8], agi = 0, lv, i;
+    int *e = g->world.events[ev], team = e[3], type = e[7], idx = e[8], agi = 0, lv, i, waiting = e[12];
     SDL_zero(s_srch);
     s_srch.valid = 1;
     s_srch.kind = type == 0 ? 1 : 2;
@@ -609,7 +739,11 @@ static void scout_resolve(pk_game *g, int ev)
     }
     pk_event_clear(g, ev);
     if (e[6] != g->world.current_area || team < 0 || team >= PK_TEAMS) {
-        return;
+        return false;
+    }
+    if (type == 2 && (waiting == 1 || !rival_of(g, idx) || g->world.formations[idx][48] > 0xfc)) {
+        rival_absent(g, team, idx, 2);
+        return true;
     }
     for (i = 0; i < 4; i++) {
         int u = g->world.teams[team][i];
@@ -624,21 +758,24 @@ static void scout_resolve(pk_game *g, int ev)
     if (type == 0) {
         int area = g->world.current_area;
         if (lv == 0 || idx < 0 || idx >= 5) {
-            return;
+            return false;
         }
         (void)area;
         s_srch.sc_known = 1;
         s_srch.sc_fights = spot_count(area, idx);
-        return;
+        return false;
     }
     if (idx < 0 || idx >= 0xc || g->world.formations[idx][43] == 0xffff) {
-        return;
+        return false;
     }
     {
         int *f = g->world.formations[idx], level = lv == 0 ? 0 : lv < 3 ? 1
                                                                         : 2,
             k;
-        if (level > f[45] || f[45] == 0xff) {
+        if (type == 2) { /* 0x100585d4: word 45 = the level, the rival's name */
+            f[45] = level;
+            SDL_strlcpy(s_srch.sc_name, rival_of(g, idx)->name, sizeof(s_srch.sc_name));
+        } else if (level > f[45] || f[45] == 0xff) {
             f[45] = level;
         }
         s_srch.sc_known = 1;
@@ -653,6 +790,7 @@ static void scout_resolve(pk_game *g, int ev)
             s_srch.sc_hp += pk_r.unit[10].b[5];    /* +0x194: byte 5 */
         }
     }
+    return false;
 }
 
 /* 0x10028538 state 2: the pop-up that announces a finished event, before
@@ -726,7 +864,7 @@ bool pk_event_handle(pk_game *g, int ev)
             const Uint8 *am = pk_arena_attack_msg();
             int *fm = g->world.formations[0xd], i;
             fm[0] = g->world.h_d4;
-            fm[1] = am[3] < 8 ? am[3] : 0;
+            fm[1] = am[36]; /* the attacker's party order */
             fm[2] = 0xff;
             for (i = 0; i < 4; i++) {
                 const Uint8 *u = am + 40 + i * 12;
@@ -743,6 +881,7 @@ bool pk_event_handle(pk_game *g, int ev)
             fm[43] = 0xffff;
             fm[45] = 0xff;
             fm[47] = 1;
+            rival_seed(g, am[3]); /* 0x10028e00: the attacker's seed */
             pk_arena_attack_done(g);
         } else {
             level = g->world.h_43c < 1 ? pk_rng_range(&g->rng, 6) : pk_rng_range(&g->rng, 8);
@@ -761,6 +900,34 @@ bool pk_event_handle(pk_game *g, int ev)
     case 1:
     { /* attack on an enemy base found by a search */
         int slot = e[8];
+        if (e[7] == 2) {
+            /* a rival's base (0x10028760): without an answer and its
+             * echo ([12] still 1), or with a refusal (byte 0xc0 above
+             * 252), the kingdom is not there; else both games seed the
+             * generator with [10] and fight the same battle, or win at
+             * once against a kingdom without a defense party */
+            const rival_entry *r = rival_of(g, slot);
+            int *f = r ? g->world.formations[slot] : NULL, waiting = e[12], seed = e[10] & 0xff, side = e[9];
+            pk_event_clear(g, ev);
+            if (!f || waiting == 1 || f[48] > 0xfc) {
+                rival_absent(g, team, slot, f && f[48] == 0xff ? 1 : 2);
+                report_open(g);
+                return true;
+            }
+            SDL_strlcpy(s_rival_name, r->name, sizeof(s_rival_name));
+            rival_seed(g, seed);
+            f[46] = 0;
+            g->boss_battle = 0;
+            pk_battle_setup(g, team, slot, side, 0);
+            pk_b.spot = -1;
+            if (f[3] == 0xff && f[4] == 0xff && f[5] == 0xff && f[6] == 0xff) {
+                pk_b.won = 1; /* +0x99c = 1: mode 2 without a battle */
+                pk_game_set_mode(g, PK_MODE_KINGDOM);
+            } else {
+                pk_game_set_mode(g, PK_MODE_BATTLE);
+            }
+            return true;
+        }
         pk_event_clear(g, ev);
         if (slot < 0 || slot >= 0xc || g->world.formations[slot][43] == 0xffff || e[6] != g->world.current_area) {
             if (team >= 0 && team < PK_TEAMS) {
@@ -777,7 +944,8 @@ bool pk_event_handle(pk_game *g, int ev)
         pk_game_set_mode(g, PK_MODE_BATTLE);
         return true;
     }
-    case 3: /* scouting finished (0x100583bc) */
+    case 3: /* scouting finished (0x100583bc; a rival that is not there:
+             * 0x10028fc4) */
         scout_resolve(g, ev);
         report_open(g);
         return true;
@@ -1329,20 +1497,131 @@ void pk_move_update(pk_object *o, pk_game *g)
 }
 
 /* ------------------------------------------------------------------ */
-/* Rival kingdoms (N-Gage Arena). Scouting sends 7 {from @4, to @20};
- * the defender's game answers 135 ([2] battlefield, [3] order, units
- * @36: type, HP, cost). An attack sends 9 {[3] party, from @4, to @20,
- * 4 x 12-byte units @40}; the defender answers 137 ([2] battlefield or
- * 0xff/253/254/255 = no battle, [3] order, [4] trap, its units @40)
- * and the battle is fought here against those units; 10 tells the
- * other side it starts. */
-
-static int s_rival_team = 0xff;
-static char s_rival_name[17];
+/* Rival kingdoms (N-Gage Arena), following the original:
+ * - an online area search (kind 4) sends 6 and waits for the answer 134
+ *   (up to five kingdoms of the area); its report turns them into rival
+ *   bases (0x10059dd4): formation slots with word 47 = 1 and word 43 =
+ *   their index in the rival table (*(game+0x9060): name and look), area
+ *   word 1 counts them; the bases of the last search are forgotten first
+ *   (FUN_1000c9b8);
+ * - Scout (kind 3, [7] 2, [8] slot) sends 7 {[1] tag, [2] area, from @4,
+ *   to @20}; the answer 135 fills the slot (FUN_10072334): battlefield,
+ *   order, unit types and HP;
+ * - Attack (kind 1, [7] 2, [8] slot, [10] the battle seed) sends 9 {[1]
+ *   tag, [2] area, [3] seed, from @4, to @20, [36] order, [37] leader,
+ *   units @40}; the answer 137 fills the slot with the defense party and
+ *   is answered at once with 10 under a new tag, which the event then
+ *   waits for: the server sends the 10 to the defender (whose game starts
+ *   its defence, scene_arena.c) and back to us;
+ * - byte 0xc0 of the slot (word 48) keeps a refusal (above 252: 255
+ *   nobody home, 253 / 254 the kingdom moved);
+ * - an online mission ends as soon as its answer is in or after 110
+ *   frames (FUN_10070da0 / FUN_10070b20). Without the answer, or after a
+ *   refusal, 0x10028fc4 reports the kingdom gone; otherwise both games
+ *   seed the generator with the attacker's seed (FUN_10071500) and fight
+ *   the same battle. */
 
 const char *pk_map_rival_name(void) { return s_rival_name; }
-static int s_rival_scout;
 
+/* the rival base in formation slot `slot`, or NULL */
+static const rival_entry *rival_of(const pk_game *g, int slot)
+{
+    int i;
+    if (slot < 0 || slot >= 0xc || g->world.formations[slot][43] == 0xffff || g->world.formations[slot][47] != 1) {
+        return NULL;
+    }
+    i = g->world.formations[slot][43];
+    return i >= 0 && i < PK_RIVALS_MAX ? &s_rtab[i] : NULL;
+}
+
+/* FUN_1000ca84: a base leaves its formation slot */
+static void base_destroy(pk_game *g, int slot)
+{
+    int *f = g->world.formations[slot];
+    f[43] = 0xffff;
+    f[47] = 0;
+    f[45] = 0xff;
+    f[46] = 0;
+    if (g->world.h_450 > 0) {
+        g->world.h_450--;
+    }
+}
+
+/* FUN_1000c9b8: every rival base goes, the table is emptied */
+static void rivals_forget(pk_game *g)
+{
+    int i;
+    for (i = 0; i < 0xc; i++) {
+        if (g->world.formations[i][43] != 0xffff && g->world.formations[i][47] == 1) {
+            base_destroy(g, i);
+        }
+    }
+    for (i = 0; i < PK_RIVALS_MAX; i++) {
+        SDL_zero(s_rtab[i]);
+        SDL_memset(s_rtab[i].look, 0xff, 4);
+    }
+}
+
+/* FUN_100723e0 (offline = true): the current area's rival bases go, the
+ * online missions (byte [11] = 1) are dropped and every party is free
+ * again. Port: also when going online (offline = false), where only the
+ * parties of dropped missions are freed, as a save made while online
+ * may still hold rival bases and online missions. */
+void pk_rivals_reset(pk_game *g, bool offline)
+{
+    int i;
+    if (g->world.current_area >= 0 && g->world.current_area < PK_AREAS) {
+        g->world.areas[g->world.current_area][1] = 0;
+    }
+    rivals_forget(g);
+    for (i = 0; i < PK_EVENTS; i++) {
+        int *e = g->world.events[i];
+        if (e[1] != 0 && (e[11] & 0xff) == 1) {
+            if (!offline && e[3] >= 0 && e[3] < PK_TEAMS) {
+                g->world.teams[e[3]][12] = 0;
+            }
+            if (e[2] == 1 && e[7] == 2 && e[8] >= 0 && e[8] < 0xc) {
+                g->world.formations[e[8]][46] = 0;
+            }
+            pk_event_clear(g, i);
+        }
+    }
+    for (i = 0; offline && i < PK_TEAMS; i++) {
+        g->world.teams[i][12] = 0;
+    }
+}
+
+/* FUN_10067174: the rival base of the kingdom whose name is at `name`
+ * (16 bytes), 0xff when there is none */
+static int rival_slot(const pk_game *g, const Uint8 *name)
+{
+    char n[17];
+    int i, slot;
+    SDL_memcpy(n, name, 16);
+    n[16] = 0;
+    for (i = 0; i < PK_RIVALS_MAX; i++) {
+        if (!s_rtab[i].name[0] || SDL_strcmp(s_rtab[i].name, n) != 0) {
+            continue;
+        }
+        for (slot = 0; slot < 0xc; slot++) {
+            if (g->world.formations[slot][43] == i && g->world.formations[slot][47] == 1) {
+                return slot;
+            }
+        }
+        break;
+    }
+    return 0xff;
+}
+
+/* FUN_10071500 / FUN_100711fc: game+0xa0 = seed, then the generator is
+ * seeded from it and the key {0x123, 0x234, 0x345, 0x456} */
+static void rival_seed(pk_game *g, int seed)
+{
+    static const Uint32 k_key[4] = { 0x123, 0x234, 0x345, 0x456 };
+    pk_rng_seed_key(&g->rng, (Uint32)(seed & 0xff), k_key, 4);
+}
+
+/* the party's units in the 12-byte form of message 9 */
 static void rival_put_units(pk_game *g, Uint8 *at, int team)
 {
     int i;
@@ -1373,37 +1652,69 @@ static void rival_put_units(pk_game *g, Uint8 *at, int team)
     }
 }
 
-static void rival_mission(pk_game *g, int team, int rival, int scout)
+/* map 0x1003f940 (Scout, kind 3) and 0x1003fbc8 (Attack, kind 1) on the
+ * rival base in `slot`: the event, the party busy, then online the
+ * message (FUN_100660c4 / FUN_10066374) the event waits for. When it
+ * cannot be sent the event is dropped and the game goes offline. */
+static void rival_mission(pk_game *g, int team, int slot, bool scout)
 {
+    const rival_entry *r = rival_of(g, slot);
     Uint8 m[88];
-    SDL_zeroa(m);
-    if (rival < 0 || rival >= g_rival_count) {
+    int ev, seed = 0, tag;
+    if (!scout) {
+        seed = (int)(pk_rng_next(&g->rng) & 0x7fff) & 0xff; /* FUN_100714e8 */
+        g->world.formations[slot][46] = 1;
+    }
+    ev = pk_event_start(g, scout ? 3 : 1, team);
+    if (ev != 0xff) {
+        int *e = g->world.events[ev];
+        e[6] = g->world.current_area;
+        e[7] = 2;
+        e[8] = slot;
+        if (!scout) {
+            e[9] = 0;
+            e[10] = seed;
+        }
+    }
+    g->world.teams[team][12] = 1;
+    if (!g->arena_online || !r) {
         return;
     }
-    s_rival_team = team;
-    s_rival_scout = scout;
-    SDL_strlcpy(s_rival_name, g_rivals[rival].name, sizeof(s_rival_name));
+    SDL_zeroa(m);
+    tag = pk_arena_next_tag();
     m[0] = scout ? 7 : 9;
-    m[1] = (Uint8)(SDL_GetTicks() & 0xff);
-    m[3] = (Uint8)team;
+    m[1] = (Uint8)tag;
+    m[2] = (Uint8)g->world.current_area;
     SDL_strlcpy((char *)m + 4, pk_online_user(), 16);
-    SDL_strlcpy((char *)m + 20, s_rival_name, 16);
+    SDL_strlcpy((char *)m + 20, r->name, 16);
     if (!scout) {
+        m[3] = (Uint8)seed;
+        m[36] = (Uint8)g->world.teams[team][8]; /* order */
+        m[37] = (Uint8)g->world.teams[team][9]; /* leader */
         rival_put_units(g, m + 40, team);
     }
-    pk_online_send(m, scout ? 36 : 88);
-    g->world.teams[team][12] = 1;
-    PK_INFO("arena: %s %s with party %d", scout ? "scouting" : "attacking", s_rival_name, team + 1);
+    if (!pk_online_send(m, scout ? 36 : 88)) {
+        if (ev != 0xff) {
+            pk_event_clear(g, ev);
+        }
+        pk_arena_go_offline(g);
+        return;
+    }
+    event_wait(g, ev, tag);
+    PK_INFO("arena: %s %s with party %d (tag %d)", scout ? "scouting" : "attacking", r->name, team + 1, tag);
 }
 
-/* a rival kingdom's scouting (135) or a failed attack (137) on the
- * original's scout report page */
-static void rival_report(pk_game *g, int team, const Uint8 *units, int field, bool gone)
+/* 0x10028fc4: the rival kingdom is not there; `why` 1 nobody home
+ * (byte 0xc0 = 255), 2 the kingdom moved (no answer, 253, 254). The
+ * party is free again; for 2 the base goes (table entry and look
+ * cleared, area word 1 - 1, FUN_1000ca84). The screen is the report's. */
+static void rival_absent(pk_game *g, int team, int slot, int why)
 {
-    int i;
+    const rival_entry *r = rival_of(g, slot);
     SDL_zero(s_srch);
     s_srch.valid = 1;
-    s_srch.kind = 2;
+    s_srch.kind = 3;
+    s_srch.why = why;
     s_srch.area = g->world.current_area;
     s_srch.leader = 0xff;
     if (team >= 0 && team < PK_TEAMS) {
@@ -1411,92 +1722,99 @@ static void rival_report(pk_game *g, int team, const Uint8 *units, int field, bo
         if (lead >= 0 && lead < 4 && g->world.teams[team][lead] != 0xff && g->world.teams[team][lead] < PK_UNIT_MAX) {
             s_srch.leader = g->world.units[g->world.teams[team][lead]][0];
         }
+        g->world.teams[team][12] = 0;
     }
-    SDL_strlcpy(s_srch.sc_name, s_rival_name, sizeof(s_srch.sc_name));
-    s_srch.sc_gone = gone;
-    s_srch.sc_known = !gone;
-    s_srch.sc_field = field;
-    s_srch.sc_level = gone ? 0 : 2;
-    for (i = 0; units && i < 4; i++) {
-        const Uint8 *e = units + i * 4;
-        if (e[0] == 0xff) {
-            continue;
-        }
-        pk_unit_template(e[0], 10);
-        s_srch.sc_power += pk_r.unit[10].b[6];
-        s_srch.sc_hp += pk_r.unit[10].b[5];
-    }
-}
-
-void pk_arena_game_message(pk_game *g, const Uint8 *m, int n)
-{
-    if (s_rival_team == 0xff) {
+    if (!r) {
         return;
     }
+    SDL_strlcpy(s_srch.sc_name, r->name, sizeof(s_srch.sc_name));
+    g->world.formations[slot][48] = 0;
+    if (why == 2) {
+        int i = g->world.formations[slot][43], *ar = g->world.areas[g->world.current_area];
+        SDL_zero(s_rtab[i]);
+        SDL_memset(s_rtab[i].look, 0xff, 4);
+        ar[1]--;
+        base_destroy(g, slot);
+    }
+    PK_INFO("arena: %s is %s", s_srch.sc_name, why == 1 ? "not defended" : "gone");
+}
+
+/* the answers to our scouting and attacks: 135 (0x10067fe4), 137
+ * (FUN_10066698) and our own 10 coming back (FUN_10066de0) */
+void pk_arena_game_message(pk_game *g, const Uint8 *m, int n)
+{
+    int slot, i, *f;
     if (m[0] == 135 && n >= 52) {
-        int i, team = s_rival_team;
-        g->world.teams[s_rival_team][12] = 0;
-        s_rival_team = 0xff;
-        if (m[2] > 252) {
-            rival_report(g, team, NULL, 0, true);
-        } else {
-            rival_report(g, team, m + 36, m[2], false);
-            for (i = 0; i < g_rival_count; i++) {
-                if (!SDL_strcmp(g_rivals[i].name, s_rival_name)) {
-                    g_rivals[i].scouted = 1;
+        slot = rival_slot(g, m + 20);
+        if (slot != 0xff) {
+            f = g->world.formations[slot];
+            if (m[2] > 0xfc) {
+                f[48] = m[2];
+            } else {
+                f[48] = 0;
+                f[0] = m[2];
+                f[1] = m[3];
+                for (i = 0; i < 4; i++) {
+                    f[3 + i] = m[36 + i * 4];
+                    f[35 + i] = m[37 + i * 4];
                 }
             }
         }
-        report_open(g);
+        pk_event_answered(g, 3, m[1]);
     } else if (m[0] == 137 && n >= 88) {
-        int team = s_rival_team, i, *fm = g->world.formations[0xd];
-        s_rival_team = 0xff;
-        if (m[2] > 252) {
-            g->world.teams[team][12] = 0;
-            rival_report(g, team, NULL, 0, true);
-            report_open(g);
+        Uint8 go[36];
+        int tag;
+        slot = rival_slot(g, m + 24);
+        if (slot == 0xff) {
             return;
         }
-        SDL_memset(fm, 0, sizeof(g->world.formations[0]));
-        fm[0] = m[2];
-        fm[1] = m[3];
-        fm[2] = m[4];
+        f = g->world.formations[slot];
+        if (m[2] > 0xfc) {
+            f[48] = m[2];
+            pk_event_answered(g, 1, m[1]);
+            return;
+        }
+        f[48] = 0;
+        f[0] = m[2];
+        f[1] = m[3];
+        f[2] = m[4];
         for (i = 0; i < 4; i++) {
             const Uint8 *e = m + 40 + i * 12;
-            fm[3 + i] = e[0];
-            fm[7 + i] = e[6];
-            fm[11 + i] = e[1];
-            fm[15 + i] = e[2];
-            fm[19 + i] = e[3];
-            fm[23 + i] = e[4];
-            fm[27 + i] = e[5];
-            fm[31 + i] = e[7];
-            fm[35 + i] = fm[39 + i] = e[9] == 0xff ? 1 : e[9];
+            f[3 + i] = e[0];
+            f[11 + i] = e[1];
+            f[15 + i] = e[2];
+            f[19 + i] = e[3];
+            f[23 + i] = e[4];
+            f[27 + i] = e[5];
+            f[7 + i] = e[6];
+            f[31 + i] = e[7];
+            f[35 + i] = e[9];
+            f[39 + i] = e[9]; /* port: the HP the battle starts from (as pk_battle_load_formation) */
         }
-        fm[43] = 0xffff;
-        fm[45] = 0xff;
-        fm[47] = 1; /* rival */
-        {
-            Uint8 go[36];
-            SDL_zeroa(go);
-            go[0] = 10;
-            go[1] = m[1];
-            SDL_strlcpy((char *)go + 4, pk_online_user(), 16);
-            SDL_strlcpy((char *)go + 20, s_rival_name, 16);
-            pk_online_send(go, 36);
+        /* message 10 under a new tag; the attack now waits for it */
+        tag = pk_arena_next_tag();
+        SDL_zeroa(go);
+        go[0] = 10;
+        go[1] = (Uint8)tag;
+        SDL_strlcpy((char *)go + 4, pk_online_user(), 16);
+        SDL_memcpy(go + 20, m + 24, 16);
+        for (i = 0; i < PK_EVENTS; i++) {
+            int *e = g->world.events[i];
+            if (e[2] == 1 && e[5] == m[1]) {
+                e[5] = tag;
+            }
         }
-        g->world.teams[team][12] = 0;
-        g->boss_battle = 0;
-        pk_battle_setup(g, team, 0xd, 0, 0);
-        pk_b.spot = -1;
-        pk_game_set_mode(g, PK_MODE_BATTLE);
+        pk_online_send(go, 36);
+    } else if (m[0] == 10 && n >= 36) {
+        pk_event_answered(g, 1, m[1]);
     }
 }
 
 /* ------------------------------------------------------------------ */
 /* Map > Attack (0x10043060): the targets an area search has found in
- * the current area: discovered spots (type 0) and enemy bases (type 1).
- * The choice goes to g+0x128 / g+0x12c in the original; here to
+ * the current area: discovered spots (type 0, index = spot), rival bases
+ * (type 2) and enemy bases (type 1), both indexed by formation slot. The
+ * choice goes to g+0x128 / g+0x12c in the original; here to
  * s_target_type / s_target_idx. */
 
 static int s_target_type, s_target_idx, s_scout;
@@ -1509,14 +1827,14 @@ static int attack_targets(pk_game *g, int *type, int *idx, int cap)
         type[n] = 0;
         idx[n++] = i;
     }
-    if (g->arena_online && g_rival_area == area) { /* rival kingdoms (134) */
-        for (i = 0; i < g_rival_count && n < cap; i++) {
+    for (i = 0; i < 0xc && n < cap; i++) {
+        if (g->world.formations[i][43] != 0xffff && g->world.formations[i][47] == 1) {
             type[n] = 2;
             idx[n++] = i;
         }
     }
     for (i = 0; i < 0xc && n < cap; i++) {
-        if (g->world.formations[i][43] != 0xffff) {
+        if (g->world.formations[i][43] != 0xffff && g->world.formations[i][47] != 1) {
             type[n] = 1;
             idx[n++] = i;
         }
@@ -1526,10 +1844,7 @@ static int attack_targets(pk_game *g, int *type, int *idx, int cap)
 static bool target_busy(pk_game *g, int type, int idx)
 {
     int i;
-    if (type == 2) {
-        return false;
-    }
-    if (type == 1) {
+    if (type == 1 || type == 2) {
         return g->world.formations[idx][46] != 0;
     }
     for (i = 0; i < PK_EVENTS; i++) {
@@ -1555,8 +1870,8 @@ static void cell_setup(pk_game *g, pk_object *o)
         fr = o->arg0 == 0x10 ? spot_kind(g->world.current_area, i) + 0x1b : -1;
     } else if (t == 1) {
         fr = o->arg0 == 0x10 ? (int)pk_app_i32(0x10096344u + (Uint32)g->world.current_area * 0x10u) / 100 + 0x12 : -1;
-    } else if (t == 2 && i < g_rival_count) {
-        const Uint8 *lk = g_rivals[i].look; /* size, transporter, mark, colour */
+    } else if (t == 2 && rival_of(g, i)) {
+        const Uint8 *lk = rival_of(g, i)->look; /* size, transporter, mark, colour */
         img = 0x45;
         frames = 0x10095db0u;
         if (o->arg0 == 0x10) {
@@ -1713,8 +2028,10 @@ static void atk_info(pk_game *g, int type, int idx)
         }
     }
     if (type == 2) { /* a rival kingdom: its name */
-        atk_text(g, g_rivals[idx].name, 0x58, g_rivals[idx].scouted ? 0xa5 : 0xc6, PK_ALIGN_CENTER);
-        if (!g_rivals[idx].scouted) {
+        const rival_entry *r = rival_of(g, idx);
+        int known = g->world.formations[idx][45] != 0xff && g->world.formations[idx][45] > 0;
+        atk_text(g, r ? r->name : "", 0x58, known ? 0xa5 : 0xc6, PK_ALIGN_CENTER);
+        if (!known) {
             atk_mes(g, 0x35, 0x58, 0xaa, 0xFFFFFFu, PK_ALIGN_CENTER);
         }
         return;
@@ -1885,12 +2202,20 @@ void pk_map_update(pk_object *o, pk_game *g)
         if (++o->counter >= 8) {
             o->counter = 0;
             o->state = 4;
+            if (g->world.current_area == 1) { /* trigger 4; with it queued, kind 6 for area 1 */
+                pk_help(g, 1, 4);
+                if (pk_help_active()) {
+                    pk_event_start(g, 6, g->world.current_area);
+                }
+            }
             pk_help(g, 0, g->world.current_area);
         }
         break;
     case 4: /* input; finished missions are handled here too */
         if ((ev = pk_event_finished(g)) != 0xff) {
-            pk_event_handle(g, ev);
+            if (!pk_event_take_special(g, ev, true)) {
+                pk_event_handle(g, ev);
+            }
             break;
         }
         if (pk_chat_pending() && g->curtain == PK_CURTAIN_NONE && !pk_help_active()) {
@@ -1987,12 +2312,23 @@ void pk_map_update(pk_object *o, pk_game *g)
         if (g->dlg_result == 0) {
             int team = g->list_top + g->cursor, cost = travel_cost(g, team);
             if (cost <= g->loot) {
+                int ev2, tag;
                 pk_loot_sub(g, cost);
-                int ev2 = pk_event_start(g, 4, team); /* area search: a report, no battle */
-                pk_arena_send_search(g);              /* online: rival kingdoms (6 -> 134) */
+                ev2 = pk_event_start(g, 4, team); /* area search: a report, no battle */
                 if (ev2 != 0xff) {
-                    g->world.teams[team][12] = 1;
                     g->world.events[ev2][6] = g->world.current_area;
+                }
+                g->world.teams[team][12] = 1;
+                if (g->arena_online) { /* 6, the event waits for 134 (0x1003f700) */
+                    tag = pk_arena_send_search(g);
+                    if (tag < 0) {
+                        if (ev2 != 0xff) {
+                            pk_event_clear(g, ev2);
+                        }
+                        pk_arena_go_offline(g);
+                    } else {
+                        event_wait(g, ev2, tag);
+                    }
                 }
             }
         }
@@ -2031,7 +2367,8 @@ void pk_map_update(pk_object *o, pk_game *g)
             g->list_120 = 0;
             s_scout = 0;
             if (g->dlg_result == 0) {
-                pk_chat_compose(s_target_type == 2 ? s_target_idx : -1, g->list_top + g->cursor);
+                pk_chat_compose(s_target_type == 2 && rival_of(g, s_target_idx) ? rival_of(g, s_target_idx)->name : NULL,
+                                g->list_top + g->cursor);
                 o->counter = 0;
                 pk_object_call(g, o, pk_chat_update, 0, pk_map_update, 0x30);
                 break;
@@ -2046,8 +2383,8 @@ void pk_map_update(pk_object *o, pk_game *g)
             int team = g->list_top + g->cursor, cost = travel_cost(g, team), ev2;
             if (cost <= g->loot) {
                 pk_loot_sub(g, cost);
-                if (s_target_type == 2) {
-                    rival_mission(g, team, s_target_idx, s_scout);
+                if (s_target_type == 2) { /* the party is busy already */
+                    rival_mission(g, team, s_target_idx, s_scout != 0);
                     ev2 = 0xff;
                 } else if (s_scout) { /* map state 0x1a: kind 3 */
                     ev2 = pk_event_start(g, 3, team);
@@ -2094,6 +2431,15 @@ void pk_map_update(pk_object *o, pk_game *g)
             o->counter = 0;
             o->state = 2;
         }
+        break;
+    case MAP_REENTER: /* 0x1003dea8 (the original's map state 0x31): enter
+                       * the map again under the closed curtain */
+        g->cam_x = g->cam_y = 0;
+        g->map_page = 0;
+        pk_object_kill_others(g, o);
+        o->counter = 4;
+        o->state = 2;
+        g->curtain = PK_CURTAIN_HELD;
         break;
     case 0x31: /* back to the kingdom */
         if (g->curtain == PK_CURTAIN_HELD) {

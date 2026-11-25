@@ -26,6 +26,10 @@ typedef enum pk_language
  * variable PK_DATA and a list of conventional locations. Returns true and
  * remembers the directory when a valid data set was found. */
 bool pk_fs_init(const char *explicit_dir);
+/* --pref: the folder for save.dat, arena.cfg and the other per-user
+ * files instead of SDL's preference folder (tests: two clients on one
+ * machine). Call before pk_fs_init. */
+void pk_fs_set_pref_dir(const char *dir);
 void pk_fs_quit(void);
 
 const char *pk_fs_data_dir(void);

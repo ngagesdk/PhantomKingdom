@@ -279,7 +279,7 @@ static int alive_all_down(void) /* FUN_10004ccc */
 static int hp_percent(int s) /* FUN_10004e80 (side 1 = team) */
 {
     int i, sum = 0, total = s ? pk_b.hp_total[0] : pk_b.hp_total[1];
-    const int(*rec)[23] = s ? pk_b.rec[0] : pk_b.rec[1];
+    const int (*rec)[23] = s ? pk_b.rec[0] : pk_b.rec[1];
     for (i = 0; i < 4; i++) {
         if (rec[i][0] != 0xff) {
             sum += rec[i][7];
@@ -389,7 +389,8 @@ static void juror_update(pk_object *o, pk_game *g)
     case 5:
         if (++o->counter > 9) {
             o->flags &= ~(Uint32)PK_OBJ_FLIP_X;
-            o->counter = o->arg1 == 1 ? 8 : o->arg1 == 2 ? 4 : 0;
+            o->counter = o->arg1 == 1 ? 8 : o->arg1 == 2 ? 4
+                                                         : 0;
             o->state = 6;
         }
         break;
@@ -675,13 +676,15 @@ static void boss_beaten(pk_game *g)
  *     (FUN_10005684: HP / 5)
  *   3 (start): the side's positions are swapped around
  *   8 (start): status 8, which stops special moves (0x10022000)
- *   1 (time < 0xa6): units stunned 40 ticks (status 0x20, FUN_10007b28)
- *   2 (time < 0xa6): units stunned 13 ticks (status 0x100, FUN_10007f48)
- *   6 (time < 0xa6): blast, a fifth of the HP (FUN_10005a9c)
- *   7 (time < 0xa6): positions swapped (FUN_10009930 / FUN_1000998c)
+ *   1 (time < 0xa6): poison (status 0x20, FUN_10007b28 per attacker)
+ *   2 (time < 0xa6): seal (status 0x100, FUN_10007f48 per attacker)
+ *   6 (time < 0xa6): blast around a point (0x10002910 state 4, damage
+ *     FUN_10005a9c: HP / 10 * 2 to units within 0x58 px, knocked down)
+ *   7 (time < 0xa6): each slot's two opposing units trade places
+ *     (0x10002910 state 5, FUN_10009930 / FUN_1000998c)
  *   3 (start): both sides placed mixed up (x tables 0x1007d9b4 / 0x1007d9c4)
- *   4, 5 (a non-flying unit reaches x 0xa0..0xc0): port approximation,
- *     40 ticks (status 0x40) / 13 ticks (status 0x400) of stun
+ *   4, 5 (a non-flying unit reaches x 0xa0..0xc0): the trap object
+ *     0x10002910 states 6 / 7 (0x100030b4 crystals, 0x10003198 a cage)
  * Units whose object has flag 0x1000 are immune (not modelled). */
 
 static int attacker_rside(void) { return pk_b.player_side == 0 ? 0 : 1; }
@@ -700,16 +703,6 @@ static int trap_targets(pk_game *g, pk_object **out)
         out[n++] = u;
     }
     return n;
-}
-
-static void trap_swap(pk_object **u, int n)
-{
-    int i;
-    for (i = 0; i < n / 2; i++) {
-        int x = u[i]->x;
-        u[i]->x = u[n - 1 - i]->x;
-        u[n - 1 - i]->x = x;
-    }
 }
 
 /* after a trap the defending side's leader speaks (FUN_10009c2c with
@@ -825,6 +818,344 @@ static void trap_card_update(pk_object *o, pk_game *g)
     }
 }
 
+/* Traps 1, 2, 4 and 5 (0x10002910 states 2, 3, 6 and 7). They wait 12
+ * frames after the cards, run their effect, wait 11 (1, 2) or 30 (4, 5)
+ * frames and hand the battle back
+ * (0x100032fc: controller state 3, game+0x4f8 = 2, game+0x44c = 0). */
+static int s_trap_cnt, s_trap_phase;
+
+/* FUN_10005770: a crystal hits every unit (type <= 0xbf, alive, not hit
+ * yet) whose box overlaps its own; boxes are position + offset (+0x4c)
+ * - half size (+0x54), twice the half size wide and high */
+static void crystal_hits(pk_game *g, pk_object *o)
+{
+    int i, ax = o->x + o->x2 - o->w, ay = o->y + o->y2 - o->h, aw = o->w * 2, ah = o->h * 2;
+    for (i = 0; i < g->objects->count; i++) {
+        pk_object *e = g->objects->items[i];
+        int bx, by, bw, bh;
+        if (!e || e->type > 0xbf || e->dead || (e->flags & 0x10000u)) {
+            continue;
+        }
+        bx = e->x + e->x2 - e->w;
+        by = e->y + e->y2 - e->h;
+        bw = e->w * 2;
+        bh = e->h * 2;
+        if (ax < bx + bw && bx < ax + aw && ay < by + bh && by < ay + ah) { /* TRect::Intersects */
+            o->flags |= 0x10000u;
+            e->flags |= 0x10000u;
+            pk_bu_damage(g, e, 1);
+        }
+    }
+}
+
+/* 0x10003340: a crystal of trap 4 (image 0x5c, frame 1 of 0x1007e49c) */
+static void trap_crystal_update(pk_object *o, pk_game *g)
+{
+    switch (o->state) {
+    case 0:
+        o->image = pk_game_image_slot(g, 0x5c);
+        pk_object_set_frames(o, 0x1007e49cu);
+        o->frame = 1;
+        o->layer = 1;
+        o->flags = 0x100481u;
+        o->x2 = o->y2 = 0;
+        o->w = 0x18;
+        o->h = 0x12;
+        pk_object_clear_work(o);
+        o->work[0] = 4;
+        o->state = 1;
+        break;
+    case 1:
+        crystal_hits(g, o);
+        if (o->flags & 0x10000u) { /* after a hit: a burst every frame */
+            pk_battle_fx(g, 0, o->arg0, 0, o->x, o->y);
+        }
+        o->work[0] += 2;
+        o->y += o->work[0];
+        if (o->y > 0x78) { /* bounces away */
+            o->work[0] = -10;
+            o->state = 2;
+        }
+        break;
+    case 2:
+        o->work[0] += 2;
+        o->y += o->work[0];
+        if (o->y > 0xde) {
+            pk_object_kill(o);
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+static pk_object *attacker_unit(pk_game *g, int slot)
+{
+    int i;
+    for (i = 0; i < g->objects->count; i++) {
+        pk_object *e = g->objects->items[i];
+        if (!e->dead && IS_UNIT(e) && rside(e->arg0) == attacker_rside() && (e->arg1 % 6) == slot) {
+            return e;
+        }
+    }
+    return NULL;
+}
+
+/* 0x100034a4: trap 5's cage (frame 0 of 0x1007e49c) over the unit in
+ * slot arg1; status 0x4000 holds the unit until the cage blinks away */
+static void trap_cage_update(pk_object *o, pk_game *g)
+{
+    switch (o->state) {
+    case 0:
+        o->image = pk_game_image_slot(g, 0x5c);
+        pk_object_set_frames(o, 0x1007e49cu);
+        o->frame = 0;
+        o->layer = 1;
+        o->flags = 0x100481u;
+        o->x2 = o->y2 = 0;
+        o->w = 0x18;
+        o->h = 0x12;
+        pk_object_clear_work(o);
+        o->counter = 0;
+        o->work[0] = 4;
+        o->state = 1;
+        break;
+    case 1:
+        o->work[0] += 2;
+        o->y += o->work[0];
+        if (o->y > 0x50) {
+            o->y = 0x51;
+            o->counter = 0;
+            o->state = 2;
+        }
+        break;
+    case 2:
+        if (++o->counter > 0x62) {
+            o->counter = 0;
+            o->state = 3;
+        }
+        break;
+    case 3:
+        if (++o->counter & 1) {
+            o->flags |= 1u;
+        } else {
+            o->flags &= ~1u;
+        }
+        if (o->counter > 10) {
+            int slot = o->arg1, *r = pk_b.rec[attacker_rside()][slot % 6];
+            if (r[0] != 0xff && r[22] == 0) {
+                pk_object *u = attacker_unit(g, slot % 6);
+                if (u) {
+                    pk_bu_status_clr(u, 0x4000);
+                }
+            }
+            pk_object_kill(o);
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+static void trap_effect_45(pk_game *g)
+{
+    int i;
+    if (s_trap_phase == 0) {
+        if (++s_trap_cnt <= 0xb) {
+            return;
+        }
+        if (pk_b.trap == 1 || pk_b.trap == 2) { /* FUN_100056d4 / FUN_10005ba4 */
+            for (i = 0; i < 6; i++) {
+                int *r = pk_b.rec[attacker_rside()][i];
+                pk_object *u;
+                if (r[0] == 0xff || r[22] != 0) {
+                    continue;
+                }
+                u = attacker_unit(g, i);
+                if (u) {
+                    pk_bu_trap_status(g, u, pk_b.trap);
+                }
+            }
+        } else if (pk_b.trap == 4) { /* 0x100030b4 */
+            pk_object_spawn(g, trap_crystal_update, OBJ_CONTROLLER, 0, 1, 0, g->cam_x + 0x2c, -10);
+            pk_object_spawn(g, trap_crystal_update, OBJ_CONTROLLER, 0, 1, 0, g->cam_x + 0x58, 0);
+            pk_object_spawn(g, trap_crystal_update, OBJ_CONTROLLER, 0, 1, 0, g->cam_x + 0x84, -20);
+        } else { /* 0x10003198: the first attacker standing in the middle */
+            for (i = 0; i < 6; i++) {
+                int *r = pk_b.rec[attacker_rside()][i];
+                pk_object *u;
+                if (r[0] == 0xff || r[22] != 0 || r[16] == 1) {
+                    continue;
+                }
+                u = attacker_unit(g, i);
+                if (u && u->x > 0x9f && u->x <= 0xc0) {
+                    pk_object_spawn(g, trap_cage_update, OBJ_CONTROLLER, 0, 1, u->arg1, u->x, -10);
+                    pk_bu_status_set(u, 0x4000);
+                    break;
+                }
+            }
+        }
+        s_trap_cnt = 0;
+        s_trap_phase = 1;
+        return;
+    }
+    if (++s_trap_cnt > ((pk_b.trap == 1 || pk_b.trap == 2) ? 0xa : 0x1d)) {
+        s_trap_cnt = 0;
+        s_trap_phase = 0;
+        pk_b.over = 0;      /* game+0x44c */
+        pk_b.trap_done = 1; /* game+0x4f8 = 2 */
+    }
+}
+
+/* FUN_10009930 (record side 0) / FUN_1000998c (record side 1): the unit
+ * of a record that is there and standing, else NULL */
+static pk_object *trap_rec_unit(pk_game *g, int rs, int slot)
+{
+    const int *r = pk_b.rec[rs][slot];
+    int screen = rs == 0 ? pk_b.player_side : 1 - pk_b.player_side;
+    if (r[0] == 0xff || r[22] != 0) {
+        return NULL;
+    }
+    return pk_object_find(g, r[0], screen, slot);
+}
+
+/* FUN_10005a9c: the attacking side's units standing within 0x58 px of
+ * the blast's x lose HP / 10 * 2 and are knocked down (flag 0x10000) */
+static void trap_blast_damage(pk_game *g, int px)
+{
+    int i, rs = attacker_rside();
+    for (i = 0; i < 6; i++) {
+        const int *r = pk_b.rec[rs][i];
+        pk_object *u;
+        int d;
+        if (r[0] == 0xff || r[22] != 0) {
+            continue;
+        }
+        u = pk_object_find(g, r[0], 0, i);
+        if (!u || px - 0x58 > u->x || u->x > px + 0x58) {
+            continue;
+        }
+        u->flags |= 0x10000u; /* F_KNOCKDOWN */
+        d = urec(u)[7] / 10 * 2;
+        pk_bu_damage(g, u, d < 0 ? 0 : d);
+    }
+}
+
+/* Trap 6 (0x10002910 state 4). After 12 frames the blast picks its
+ * point: random slots of the attacking side (FUN_100714e8 % 6) until one
+ * is empty or down, then the first object with that slot (any type for an
+ * empty slot: with four units that is slot 4 or 5, which finds the face
+ * at (0, 4) when player_side is 1, else that slot's marker; for a fallen
+ * unit its own object). The camera jumps there (game+0xa8 = 7, one call
+ * of FUN_100049e0), small bursts (0x100155f4 state 0x28) go off in pairs
+ * at x -+ 10, -+ 0x28, -+ 0x46 (y 0x8f) on frames 1, 3, 5, and on frame 13
+ * the damage lands; the camera goes back to the player (game+0xa8 = 0)
+ * and the battle goes on at once (0x10003320). */
+static int s_blast_x;
+
+static void trap_blast(pk_game *g)
+{
+    static const int k_dx[3] = { 10, 0x28, 0x46 };
+    if (s_trap_phase == 0) {
+        int rs = attacker_rside(), slot = 0, guard = 0;
+        const int *r;
+        pk_object *o;
+        if (++s_trap_cnt <= 0xb) {
+            return;
+        }
+        s_trap_cnt = 0;
+        s_trap_phase = 1;
+        do {
+            slot = (int)(pk_rng_next(&g->rng) & 0x7fff) % 6;
+            r = pk_b.rec[rs][slot];
+        } while (r[0] != 0xff && r[22] == 0 && ++guard < 0x1000); /* port: the original loops forever when all six stand */
+        o = pk_object_find(g, r[0], 0, slot);
+        /* port: the original reads through a NULL object here (no such
+         * object exists in a normal battle); the view's middle instead */
+        s_blast_x = o ? o->x : g->cam_x + 0x58;
+        pk_b.cam[2] = s_blast_x;
+        pk_b.cam[3] = o ? o->y : 0x99;
+        pk_b.cam[1] = 7;
+        camera_follow(g);
+        return;
+    }
+    ++s_trap_cnt;
+    if (s_trap_cnt == 1 || s_trap_cnt == 3 || s_trap_cnt == 5) {
+        int dx = k_dx[s_trap_cnt / 2];
+        pk_battle_fx(g, 0x28, 0, 0, s_blast_x - dx, 0x8f);
+        pk_battle_fx(g, 0x28, 0, 0, s_blast_x + dx, 0x8f);
+    }
+    if (s_trap_cnt <= 0xc) {
+        return;
+    }
+    trap_blast_damage(g, s_blast_x);
+    s_trap_cnt = 0;
+    s_trap_phase = 0;
+    pk_b.cam[1] = 0;    /* game+0xa8 = 0 */
+    pk_b.over = 0;      /* game+0x44c */
+    pk_b.trap_done = 1; /* game+0x4f8 = 2 */
+}
+
+/* all standing units of both sides shown (flag 1) or hidden */
+static void trap_swap_show(pk_game *g, int show)
+{
+    int i, rs;
+    for (i = 0; i < 6; i++) {
+        for (rs = 0; rs < 2; rs++) {
+            pk_object *u = trap_rec_unit(g, rs, i);
+            if (!u) {
+                continue;
+            }
+            if (show) {
+                u->flags |= 1u;
+            } else {
+                u->flags &= ~1u;
+            }
+        }
+    }
+}
+
+/* Trap 7 (0x10002910 state 5). After 12 frames every standing unit
+ * blinks (shown on odd frames) for 11 frames, then in each slot the two
+ * sides' standing units trade positions (x and y), they blink 11 more
+ * frames, are shown and the battle goes on at once (0x10003300). */
+static void trap_swap(pk_game *g)
+{
+    int i;
+    if (s_trap_phase == 0) {
+        if (++s_trap_cnt <= 0xb) {
+            return;
+        }
+        s_trap_cnt = 0;
+        s_trap_phase = 1;
+        return;
+    }
+    ++s_trap_cnt;
+    trap_swap_show(g, s_trap_cnt & 1);
+    if (s_trap_cnt <= 10) {
+        return;
+    }
+    s_trap_cnt = 0;
+    if (s_trap_phase == 1) {
+        for (i = 0; i < 6; i++) {
+            pk_object *a = trap_rec_unit(g, 0, i), *b = trap_rec_unit(g, 1, i);
+            if (a && b) {
+                int x = a->x, y = a->y;
+                a->x = b->x;
+                a->y = b->y;
+                b->x = x;
+                b->y = y;
+            }
+        }
+        s_trap_phase = 2;
+        return;
+    }
+    trap_swap_show(g, 1);
+    s_trap_phase = 0;
+    pk_b.over = 0;      /* game+0x44c */
+    pk_b.trap_done = 1; /* game+0x4f8 = 2 */
+}
+
 static void trap_fire(pk_game *g)
 {
     pk_object *u[4];
@@ -840,25 +1171,11 @@ static void trap_fire(pk_game *g)
             if (r[16] == 1) {
                 break; /* flying */
             }
-            /* fallthrough */
-        case 6:
             r[7] -= r[7] / 5;
             if (r[7] < 1) {
                 r[7] = 1;
             }
             pk_object_spawn(g, fx_update, OBJ_FX, 1, u[i]->arg0, u[i]->arg1, u[i]->x, u[i]->y - 0x14);
-            break;
-        case 1:
-        case 4:
-            u[i]->state = 4;
-            u[i]->work[0] = 0x28;
-            pk_object_spawn(g, fx_update, OBJ_FX, 0x31, u[i]->arg0, u[i]->arg1, u[i]->x, u[i]->y - 0x1e);
-            break;
-        case 2:
-        case 5:
-            u[i]->state = 4;
-            u[i]->work[0] = 0xd;
-            pk_object_spawn(g, fx_update, OBJ_FX, 0x31, u[i]->arg0, u[i]->arg1, u[i]->x, u[i]->y - 0x1e);
             break;
         case 8:
             pk_object_spawn(g, fx_update, OBJ_FX, 0x34, u[i]->arg0, u[i]->arg1, u[i]->x, u[i]->y - 0x14);
@@ -891,9 +1208,6 @@ static void trap_fire(pk_game *g)
                 }
             }
         }
-    }
-    if (pk_b.trap == 7) {
-        trap_swap(u, n);
     }
     if (pk_b.trap == 8) {
         pk_b.sealed[attacker_rside()] = 1; /* status 8: no special moves */
@@ -961,9 +1275,27 @@ static void trap_tick(pk_game *g)
         trap_drop(g);
         return;
     }
+    if (pk_b.trap_done == 4) {
+        trap_effect_45(g);
+        return;
+    }
+    if (pk_b.trap_done == 5) {
+        trap_blast(g);
+        return;
+    }
+    if (pk_b.trap_done == 6) {
+        trap_swap(g);
+        return;
+    }
     if (pk_b.trap_done == 2) {
         if (pk_b.trap_revealed && t == 0) {
             pk_b.trap_done = 3;
+        } else if (pk_b.trap_revealed && (t == 1 || t == 2 || t == 4 || t == 5)) {
+            s_trap_cnt = s_trap_phase = 0;
+            pk_b.trap_done = 4;
+        } else if (pk_b.trap_revealed && (t == 6 || t == 7)) {
+            s_trap_cnt = s_trap_phase = 0;
+            pk_b.trap_done = t == 6 ? 5 : 6;
         } else if (pk_b.trap_revealed) {
             trap_fire(g);
         }
@@ -976,6 +1308,7 @@ static void trap_tick(pk_game *g)
         trap_reveal(g);
     } else if (t == 1 || t == 2 || t == 6 || t == 7) {
         if (pk_b.time < 0xa6) {
+            pk_b.over = 1; /* 0x100018e8: game+0x44c = 1 */
             trap_reveal(g);
         }
     } else { /* 4, 5: someone walks into the middle */
@@ -983,6 +1316,7 @@ static void trap_tick(pk_game *g)
         int n = trap_targets(g, u), i;
         for (i = 0; i < n; i++) {
             if (urec(u[i])[16] != 1 && u[i]->x >= 0xa0 && u[i]->x <= 0xc0) {
+                pk_b.over = 1; /* 0x100016c8: game+0x44c = 1 */
                 trap_reveal(g);
                 break;
             }
@@ -1118,7 +1452,7 @@ static void hud_update(pk_object *o, pk_game *g)
         pk_object *u = NULL;
         for (i = 0; i < g->objects->count; i++) {
             pk_object *e = g->objects->items[i];
-            if (!e->dead && IS_UNIT(e) && e->arg0 == o->arg0 && (e->arg1 & 3) == o->arg1) {
+            if (!e->dead && IS_UNIT(e) && e->arg0 == o->arg0 && e->arg1 == o->arg1) {
                 u = e;
                 break;
             }
@@ -1126,8 +1460,9 @@ static void hud_update(pk_object *o, pk_game *g)
         if (!o->frames) {
             o->image = pk_game_image_slot(g, IMG_BANNER);
             pk_object_set_frames(o, 0x1007da64u);
-            o->frame = (o->arg0 == 0 ? 2 : 6) + o->arg1;
+            o->frame = o->arg1 + (o->arg0 == 0 ? (o->arg1 > 3 ? 0x5e : 2) : (o->arg1 > 3 ? 0x60 : 6));
             o->layer = 1;
+            o->x = SDL_clamp(o->x, g->cam_x + 8, g->cam_x + 0xa8); /* state 0 */
         }
         if (!u || urec(u)[22] || u->state == 7 || u->state == 0x20 || !pk_b.started) {
             o->flags = 0x400;
@@ -1159,10 +1494,10 @@ static void hud_spawn(pk_game *g)
     pk_object_spawn(g, hud_update, OBJ_HUD, 0x33, 2, 0, 0x58, 4);
     pk_object_spawn(g, hud_update, OBJ_HUD, 0x32, left, 3, 0x0e, 0x19);
     pk_object_spawn(g, hud_update, OBJ_HUD, 0x32, 1 - left, 4, 0xa2, 0x19);
-    for (s = 0; s < 2; s++) {
-        for (i = 0; i < 4; i++) {
-            pk_object_spawn(g, hud_update, OBJ_HUD, 0x20, s, i, 0, 0);
-            o = pk_object_spawn(g, hud_update, OBJ_HUD, 0x20, s, i, 0, 0);
+    for (s = 1; s >= 0; s--) { /* 0x10003d28 states 0 / 8, side 1 first, all six slots */
+        for (i = 0; i < 6; i++) {
+            pk_object_spawn(g, hud_update, OBJ_HUD, 0x20, s, i, 0x58, 0xa);
+            o = pk_object_spawn(g, hud_update, OBJ_HUD, 0x20, s, i, 0x58, 0x12);
             if (o) {
                 o->work[1] = 1; /* the HP icon */
             }
@@ -1305,7 +1640,7 @@ static void controller_update(pk_object *o, pk_game *g)
             /* port: the trap runs here (the original's controller becomes
              * the trap object 0x10002910 meanwhile) */
             trap_tick(g);
-            cam = true;
+            cam = false; /* the trap object does not run the camera (FUN_100049e0) */
             break;
         }
         if (pk_b.over) { /* a special move runs: the clock waits too */
@@ -1428,7 +1763,7 @@ static void controller_update(pk_object *o, pk_game *g)
                 o->state = 10;
                 break;
             }
-            u->state = 0; /* back to its idle pose */
+            u->state = 0;          /* back to its idle pose */
             u->flags |= 0x200000u; /* keeps moving while everyone else stops */
             pk_b.cam[1] = 7;
             pk_b.cam[2] = u->x;
@@ -1789,8 +2124,10 @@ void pk_mode_result(pk_game *g)
         if (pk_b.mode > 1 && pk_b.spot >= 0 && pk_b.spot < 5) {
             g->world.areas[pk_b.area][30 + pk_b.spot]++; /* spot searched once more */
         }
-        if (g->boss_battle == 0 && pk_b.formation < 0xc && g->world.formations[pk_b.formation][43] != 0xffff) {
-            /* an enemy base is destroyed (FUN_1000d5ac -> FUN_1000ca84) */
+        if (g->boss_battle == 0 && pk_b.formation < 0xc && g->world.formations[pk_b.formation][43] != 0xffff &&
+            g->world.formations[pk_b.formation][47] == 0) {
+            /* an enemy base is destroyed (FUN_1000d5ac -> FUN_1000ca84);
+             * a rival base stays */
             int *f = g->world.formations[pk_b.formation];
             f[43] = 0xffff;
             f[45] = 0xff;

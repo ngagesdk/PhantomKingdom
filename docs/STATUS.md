@@ -27,7 +27,15 @@ N-Gage Arena through PhantomLink works (tested with two players).
 ## Known differences
 
 - Quest spots: trade quests work; the online-only quest kinds are not used.
-- Traps are revealed with their cards.
+- Event kinds 7..11 (N-Gage Arena) are not created: the defender's game
+  answers scouting and attacks without its own kinds 9 / 7, and kind 8
+  (the "False alarm" report) is not started.
+- Online message 22 (a battle result the original builds after a battle
+  against a rival) is not sent; PhantomLink does not expect it.
+- The Upgrade screen and the detail screens 0x1003c224 / 0x1005fc0c are
+  drawn as text.
+- The pop-up function does not check game+0x5c / +0x140, and area pop-ups
+  are remembered in popups.dat instead of +0x174 / +0x178.
 - Several screens (the Global Auction among them) are drawn as text panels
   instead of the original artwork.
 

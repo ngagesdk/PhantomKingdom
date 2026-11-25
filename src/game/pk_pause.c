@@ -228,7 +228,7 @@ static void secretary(pk_object *o, pk_game *g) /* 0x10051f64 */
         o->counter = rnd33(g);
         o->image = pk_game_image_slot(g, 0x4e + sec * 2);
         if (ok) {
-            const int(*off)[2] = o->arg1 == 1 ? k_eye_off : k_mouth_off;
+            const int (*off)[2] = o->arg1 == 1 ? k_eye_off : k_mouth_off;
             pk_object_set_frames(o, k_sec_frames[sec]);
             pk_object_set_anim(o, o->arg1 == 1 ? k_sec_eye[sec] : k_sec_mouth[sec]);
             o->x += off[sec][0];

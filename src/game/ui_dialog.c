@@ -12,9 +12,9 @@
  * slide in from the side given by game+0x110 and out again when the
  * caller takes the root object back. */
 #include "game/ui_dialog.h"
-#include "game/pk_arena_game.h"
 #include "audio/pk_audio.h"
 #include "core/pk_app.h"
+#include "game/pk_arena_game.h"
 #include "game/pk_scenes.h"
 #include "gfx/pk_font.h"
 #include "input/pk_haptics.h"
@@ -142,17 +142,12 @@ static void root_update(pk_object *o, pk_game *g)
         }
         if (g->dlg_type == 8) {
             const int *a = g->world.areas[g->world.current_area];
-            /* port: the players the server reported for this area (area
-             * search, message 134) count as rival kingdoms here; the
-             * area word 1 alone stays 0 in the port, so Chat was never
-             * offered */
-            int rivals = g->arena_online && g_rival_area == g->world.current_area ? g_rival_count : 0;
-            /* Chat needs the Arena and a player in the area; Scout
-             * needs someone there at all */
-            if (!g->arena_online || (a[1] == 0 && rivals == 0)) {
+            /* Chat needs the Arena and a rival base (area word 1);
+             * Scout needs a place at all */
+            if (!g->arena_online || a[1] == 0) {
                 g->dlg_count--;
             }
-            if (a[1] + a[2] + a[0] + rivals == 0) {
+            if (a[1] + a[2] + a[0] == 0) {
                 g->dlg_count--;
             }
         }

@@ -23,18 +23,66 @@
 
 void pk_rng_seed(pk_rng *r, Uint64 seed)
 {
-    r->state = seed ? seed : 0x9E3779B97F4A7C15ull;
+    int i;
+    r->seed = (Uint32)seed;
+    r->mt[0] = r->seed;
+    for (i = 1; i < PK_RNG_N; i++) {
+        r->mt[i] = 1812433253u * (r->mt[i - 1] ^ (r->mt[i - 1] >> 30)) + (Uint32)i;
+    }
+    r->mti = PK_RNG_N;
+}
+
+void pk_rng_seed_key(pk_rng *r, Uint32 seed, const Uint32 *key, int count)
+{
+    int i = 1, j = 0, k;
+    pk_rng_seed(r, seed);
+    for (k = count > PK_RNG_N - 1 ? count : PK_RNG_N; k > 0; k--) {
+        r->mt[i] = (r->mt[i] ^ ((r->mt[i - 1] ^ (r->mt[i - 1] >> 30)) * 1664525u)) + key[j] + (Uint32)j;
+        if (++i >= PK_RNG_N) {
+            r->mt[0] = r->mt[PK_RNG_N - 1];
+            i = 1;
+        }
+        if (++j >= count) {
+            j = 0;
+        }
+    }
+    for (k = PK_RNG_N - 1; k > 0; k--) {
+        r->mt[i] = (r->mt[i] ^ ((r->mt[i - 1] ^ (r->mt[i - 1] >> 30)) * 1566083941u)) - (Uint32)i;
+        if (++i >= PK_RNG_N) {
+            r->mt[0] = r->mt[PK_RNG_N - 1];
+            i = 1;
+        }
+    }
+    r->mt[0] = 0x80000000u;
 }
 
 Uint32 pk_rng_next(pk_rng *r)
 {
-    /* xorshift64* */
-    Uint64 x = r->state;
-    x ^= x >> 12;
-    x ^= x << 25;
-    x ^= x >> 27;
-    r->state = x;
-    return (Uint32)((x * 0x2545F4914F6CDD1Dull) >> 32);
+    static const Uint32 mag[2] = { 0, 0x9908b0dfu };
+    Uint32 y;
+    int kk;
+    if (r->mti >= PK_RNG_N) {
+        if (r->mti != PK_RNG_N) { /* never seeded */
+            pk_rng_seed(r, r->seed);
+        }
+        for (kk = 0; kk < PK_RNG_N - 5; kk++) {
+            y = (r->mt[kk] & 0x80000000u) | (r->mt[kk + 1] & 0x7fffffffu);
+            r->mt[kk] = r->mt[kk + 5] ^ (y >> 1) ^ mag[y & 1];
+        }
+        for (; kk < PK_RNG_N - 1; kk++) {
+            y = (r->mt[kk] & 0x80000000u) | (r->mt[kk + 1] & 0x7fffffffu);
+            r->mt[kk] = r->mt[kk + 5 - PK_RNG_N] ^ (y >> 1) ^ mag[y & 1];
+        }
+        y = (r->mt[PK_RNG_N - 1] & 0x80000000u) | (r->mt[0] & 0x7fffffffu);
+        r->mt[PK_RNG_N - 1] = r->mt[4] ^ (y >> 1) ^ mag[y & 1];
+        r->mti = 0;
+    }
+    y = r->mt[r->mti++];
+    y ^= y >> 11;
+    y ^= (y << 7) & 0x9d2c5680u;
+    y ^= (y << 15) & 0xefc60000u;
+    y ^= y >> 18;
+    return y;
 }
 
 int pk_rng_range(pk_rng *r, int n)

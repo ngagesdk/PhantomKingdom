@@ -326,7 +326,7 @@ names; their kind and value come from 0x100ac7d8 (FUN_10063cc0).
   each area knows at most twelve places. Enemy bases take formation
   slots 0..11 (word 43 = serial, 0xffff free; 46 = under attack;
   47 = rival).
-- Search > Scout starts kind 3 (report 0x100583bc, not reconstructed).
+- Search > Scout starts kind 3 (report 0x100583bc).
 - Map > Attack (0x10043060) picks a spot (g+0x128 = 0) or a base (1);
   then the team list. Spot -> kind 2 (FUN_100740e0): battle, area boss
   on the last visit, treasure for spot kind 4. Base -> kind 1:
@@ -391,13 +391,22 @@ loot, VP, drops and the clear item; the port shows them in a window.
 
 ## Area pop-ups and event kinds
 
-- Map state 9 calls FUN_10071c74(g, 0, area): popupa###.txt the first
-  time (+0x174 + area*8), popupb### later. Port: shown once per area,
-  flags in popups.dat beside the save (save layout unchanged).
+- Map state 9 calls FUN_10071c74(g, 0, area). The name (FUN_1005ab64) is
+  popupa### while +0x174 + area*8 is 0, else popupb###; FUN_10071c74
+  shows nothing once +0x178 + area*8 is set. The window (0x1005af94) sets
+  +0x174 when it opens popupa and +0x178 when it opens popupb. Closing it
+  (0x1005b38c, +0x3b0 == 0) starts event kind 6 with the area as the team
+  while +0x178 is 0, i.e. after popupa. In area 1 map state 9 first calls
+  FUN_10071c74(1, 4) and, when that queued a pop-up (+0x1a9f8 != 0),
+  starts kind 6 for area 1 too. Port: both flags in popups.dat beside the
+  save (bytes 0..63 / 64..127; save layout unchanged).
 - Event kinds: 0 invasion, 1 base attack, 2 spot attack, 3 scout,
-  4 area search, 6 started when an area pop-up first closes (exact
-  meaning unclear; not reconstructed), 7-11 N-Gage Arena (online),
-  5 never started.
+  4 area search, 6 the delayed second area pop-up (330 frames), 7-11
+  N-Gage Arena (online), 5 never started. Kinds 6 and 7 never reach
+  0x10028538: when FUN_10070e6c returns one, the map (0x1003f148) runs
+  FUN_10071c74(0, current area) for 6 or FUN_10071c74(1, 0x22) for 7, the
+  kingdom (0x10024ba4) drops 6 and does the same for 7; then
+  FUN_10070e28. Port: pk_event_take_special (scene_map.c).
 - Opened paths: the area-boss win (0x10001b1c) appends (0x53, area) to
   the queue at game+0x144 (six 8-byte pairs, 0xffff ends) for every
   area it unlocks. After the results (0x1000b200) a non-empty queue
@@ -417,7 +426,7 @@ Area-boss win (battle controller state 4): +0x440 progress + 1 (max
 (26 px apart, <= 10 on screen) until frame 0x42a or 5; then +0x43c + 1
 (times cleared; higher enemy levels), +0x448 = 1, back to the kingdom.
 Port: PK_MODE_ENDING (scene_ending.c); the title's Credits run the same
-roll over staff.dat (the original credits screen 0x1003632c differs).
+roll over staff.dat (scene_ending.c follows the credits screen 0x1003632c).
 
 ## Quest spots (reconstructed: trade quests)
 
@@ -439,13 +448,54 @@ and 0x10 (quests 2, 4..18) are only dealt online and are not used.
 The defender's trap (formation byte 2 / +0x4f4) hits the attacker's
 units that are not down. Start: 0 pit (non-flying lose HP/5,
 FUN_10005684), 3 positions changed, 8 status 8 (unused by any rule).
-When time < 0xa6: 1 status 0x20 for 40 ticks (FUN_10007b28), 2 status
-0x100 for 13 (FUN_10007f48), 6 blast HP/5 around a point (FUN_10005a9c),
-7 units swapped (FUN_10009930/998c). 4/5 when a non-flying attacker is
-at x 0xa0..0xc0 (effects not fully decoded; the port stuns 40 / 13).
+When time < 0xa6: 1 poison (FUN_10007b28: status 0x20, timer 40, object
+flag 0x1000 is immune), 2 seal (FUN_10007f48: status 0x100), 6 blast
+around a point, 7 opposing units trade places. 4/5 when a non-flying
+attacker is at x 0xa0..0xc0. For all of them 0x100018e8 sets game+0x44c =
+1 (everyone stops, the clock waits) and makes the controller the trap
+object (0x10002910, FUN_1006ad90), so the camera (FUN_100049e0) and the
+rest of the controller do not run until it hands back.
+The trap object 0x10002910: state 1 shows the cards, then trap 1 -> 2,
+2 -> 3, 6 -> 4, 7 -> 5, 4 -> 6, 5 -> 7. States 2..7 wait 12 frames, run
+the effect and finish through 0x100032fc (controller state 3, +0x4f8 = 2,
++0x44c = 0; states 4 / 5 enter it at 0x10003320 / 0x10003300, without the
+last wait). State 2 / 3: FUN_100056d4 / FUN_10005ba4 (FUN_10007b28 / FUN_10007f48
+for all six attacker records), then 11 frames. State 6 (trap 4): three crystals 0x10003340 at
+(cam + 0x2c, -10), (cam + 0x58, 0), (cam + 0x84, -20), then 30 frames.
+A crystal (image 0x5c, frames 0x1007e49c frame 1, flags 0x100481, box
+0x18 x 0x12) falls from speed 4 (+2), hits every unit it touches once
+(FUN_10005770: flag 0x10000 on both, FUN_10008af4 with 1), spawns the
+burst 0x100155f4 state 0 every frame after a hit, bounces at y > 0x78
+(speed -10) and goes at y > 0xde. State 7 (trap 5): the first attacker
+(slots 0..5, standing, not flying) at x 0xa0..0xc0 gets status 0x4000 and
+a cage 0x100034a4 (frame 0) that falls to y 0x51, stays 99 frames,
+blinks 11 frames and clears the status; then 30 frames.
+State 4 (trap 6, 0x10002b80): after the 12 frames it rolls attacker slots
+(FUN_100714e8 % 6; side 0 records when +0x498 is 0, else side 1) until one
+is empty (byte 0xff) or down (+0x58) - the loop has no way out when all six
+stand - and takes FUN_100707a4(type, slot, 0): for a fallen unit its
+object, for an empty slot the first object with arg0 0 and that arg1 (any
+type). With four units that is slot 4 or 5: the face 0x100055b8 at (0, 4)
+when +0x498 is 1, else the marker 0x10003d28 of that slot (made for all six
+slots, side 1 first, at 0x58,0xa / 0x58,0x12; a slot without a unit keeps
+x 0x58 clamped to the view and stays hidden). Nothing else matches, so a
+NULL object (read at +0x80) does not happen in a normal battle. Its x / y
+go to trap +0x88 and the camera point, game+0xa8 = 7 and FUN_100049e0 runs
+once. Then frame 1 / 3 / 5: bursts 0x100155f4 state 0x28 (a0 0, a1 0) at
+x -+ 10 / -+ 0x28 / -+ 0x46, y 0x8f; frame 13: FUN_10005a9c, controller
+again, game+0xa8 = 0. FUN_10005a9c: every attacker standing (slots 0..5,
+found with arg0 0) within x -+ 0x58 of the point gets flag 0x10000 (knock
+down) and FUN_10008af4 with HP (FUN_10008c98) / 10 * 2.
+State 5 (trap 7, 0x10002e40): after the 12 frames, 11 frames in which
+every standing unit (FUN_10009930: record side 0 slot, screen side +0x498;
+FUN_1000998c: record side 1, the other screen side) is shown on odd frames
+(flag 1) and hidden on even ones; then for each slot with both units
+standing they swap +0x80 / +0x84; 11 more blinking frames, all shown, done.
 Status timers: game+0x1a590 + 0x748 + side*0x18 + slot*4. Statuses in
-0x570 stop a unit acting; 1 halves damage taken. Port: stun = idle with
-the timer; "Trap!" line instead of the effect sprites.
+0x570 stop a unit acting; 1 halves damage taken. Port (pk_battle.c): the
+trap object's states are trap_done 3..6 run by the controller, which then
+leaves the camera alone; the blast guards the endless roll and the NULL
+object (centre of the view) that the original does not.
 
 ## Battle units (dispatcher 0x10020f3c, 49 class behaviours)
 
@@ -536,6 +586,129 @@ without), level, targeting (+0x276c), 0, HP. Scout answer 135
 word 17. The defender's game also starts event kinds 9 and 7 for the
 defense; the port only answers. Port: net/pk_online.c,
 game/scene_arena.c, rival targets in scene_map.c.
+
+## Rival bases and attacks (FUN_10066374, FUN_10066698, 0x10028760; port: game/scene_map.c)
+
+Rival table: *(game+0x9060), five entries of 0x38 bytes (name first, 16
+bytes; then the rest of the 134 entry), followed by four arrays of five
+words at +0x118 / +0x12c / +0x140 / +0x154 (0xff = none). FUN_1000c9b8
+(search report 0x10059dd4, also 0x1007240c) destroys every formation with
+word 47 == 1 (FUN_1000ca84) and empties the table. The 134 answer
+(0x10067f9c) is kept in the 0x68 byte buffer *(game+0x1aa18) and clears
+word 12 of the waiting kind 4 event (FUN_10070f24(4, m[1])). The search
+report's finds (*(game+0x19ad0), +0x48: find types) add, for type 2, a
+rival base: free slot FUN_1000c970, word 47 = 1, word 43 = area word 1
+(the rival's table index), the 134 entry copied into the table, area
+word 1 + 1. Type 1 is an enemy base (FUN_1000c738 with a random level,
+word 43 = area word 4 serial, word 4 + 1, word 2 + 1).
+
+Event words used by online missions: [5] message tag, [11] (byte) 1,
+[12] 1 = waiting for the answer. FUN_10070da0(ev, tag) sets [11] = 1,
+[12] = 1, [5] = tag and the timer to table 0x100aed28[kind] (5, 110, 5,
+110, 110, 5, 5, 5, 5, 110, 5, 5: 110 frames for kinds 1, 3, 4, 9).
+FUN_10070f24(kind, tag) clears [12] of the events of that kind with [12]
+== 1 and [5] == tag.
+
+Attack on a rival base (map 0x1003fbc8, target type +0x128 == 2): tag =
+FUN_100714e8 & 0xff; formation word 46 = 1; FUN_10070c78(1, team) with
+[6] area, [7] 2, [8] slot (+0x12c), [9] 0, [10] tag; team word 12 = 1.
+Online (+0x1aa0c == 2): FUN_10066374(rival = formation word 43
+(FUN_1000cae0), tag, &out) sends 9 (to = table name, units of the team
++0xec); on failure the event is cleared and the game goes offline
+(FUN_100723e0), else FUN_10070da0(ev, out). Then trigger 0x15 and map
+state 0x31. Scouting (0x1003f940, FUN_100660c4) works the same with
+message 7 and kind 3.
+
+Answer 137 (FUN_10066698, kept in *(game+0x1aa20)): FUN_10067174 finds
+the formation slot by the name @24 (0xff: ignored). m[2] > 0xfc: byte
+0xc0 of the formation = m[2] and FUN_10070f24(1, m[1]). Else byte 0xc0
+= 0, words 0..2 = m[2..4], the units @40 (12 bytes each) into words 3..,
+message 10 is sent at once (36 bytes: [1] = the counter +0x1aa10, then
++1; own name @4; to @20 = the name @24) and the kind 1 event with [5] ==
+m[1] gets [5] = that new tag. A 10 that comes back with our own name @4
+(FUN_10066de0) clears word 12 (FUN_10070f24(1, m[1])); a 10 from someone
+else is the defence (see below).
+
+When the kind 1 event ends (110 frames) the handler (0x10028760, [7] ==
+2): if [12] == 1 (no answer, no echo) or byte 0xc0 > 0xfc: team word 12
+= 0, 0x10028fc4 with +0x1c = 1 when the byte is 0xff, else 2 (also for
+the timeout), +0x20 = word 43, byte 0xc0 = 0. Otherwise FUN_10071500(byte
+[10]): game+0xa0 = tag and FUN_100711fc reseeds the random generator (an
+init_by_array over +0x5f0 with the key {0x123, 0x234, 0x345, 0x456}), so
+both games fight the same battle; then FUN_1000cc40(team, slot, [9], 0)
+and mode 0, or, when all four unit words are 0xff, +0x99c = 1 and mode 2
+(won without a fight). After a fight formation word 46 = 0.
+
+Messages and tags: byte 1 of every message comes from one counter,
+game+0x1aa10, taken and counted on (FUN_10065ff0 for 6, FUN_100660c4 for
+7, FUN_10066374 for 9, 10 in FUN_10066698); `out` is that byte, the tag
+the event waits for. 9 (88 bytes): [1] tag, [2] area (+0x424), [3] the
+battle seed, own name @4, the table entry's name @20, [36] party order
+(team word 8), [37] leader (team word 9), units @40 x 12 as in 137. 7 (36
+bytes): [1] tag, [2] area, own name @4, name @20 (the table entry of the
+target slot's word 43). The server answers both with result 254 when the
+target is not online in the same area.
+
+FUN_10067174(name): the table index whose name equals the name given
+(case sensitive), then the formation slot 0..11 with word 43 = that index
+and word 47 = 1; 0xff when either is missing.
+
+Answer 135 (0x10067fe4, kept in *(game+0x1aa1c), 52 bytes): slot by the
+name @20; [2] > 0xfc: byte 0xc0 = [2]; else byte 0xc0 = 0 and
+FUN_10072334 fills words 0 = [2], 1 = [3], and per unit 3 + i = [36 + i *
+4] (type), 35 + i = [37 + i * 4] (HP); then FUN_10070f24(3, [1]). The
+kind 3 event's end (0x100583bc): team word 12 = 0; a rival base (result
+type 2) with [12] still 1 or byte 0xc0 above 252 goes to 0x10028fc4
+with +0x1c = 2 (always "moved", also for 255), else word 45 = the scout
+level (0, 1 for level 1..2, 2 above; set, not raised) and the base page
+with the rival's name.
+
+Area search online (0x1003f700): 6 and FUN_10070da0 on the kind 4 event.
+The search report's finds (FUN_10063f40 + 0x10064388): the place check
+(area words 0 + 1 + 2 + new <= 12) counts the rival bases of the last
+search; online (FUN_10072324 == 2) the enemy bases are limited to three
+(word 2 + new <= 3); then every entry of the kept 134 with a name is a
+find of type 2. 0x10059dd4 clears area word 1 and runs FUN_1000c9b8
+before the finds are added; type 2: a free slot (none: skipped), word 47
+= 1, word 43 = area word 1, the entry's name and its four look bytes
+into the table (look into the arrays at +0x118 / +0x12c / +0x140 /
++0x154), area word 1 + 1.
+
+The mission timer (FUN_10070b20): an event with byte [11] = 1 also ends
+as soon as [12] is 0, so an online mission ends when its answer (and for
+an attack the echo of 10) is in, or after 110 frames.
+
+The generator (game+0x5f0..+0x618) is a Mersenne Twister with ten words
+of state: N 10, M 5, MT19937's matrix 0x9908b0df and tempering.
+FUN_10071190 is init_genrand (1812433253), FUN_100711fc init_by_array
+(1664525 / 1566083941, at least ten steps) started from game+0xa0
+instead of 19650218, FUN_10071310 genrand_int32 (index 11: seeded from
+game+0xa0 first), FUN_100714e8 = genrand & 0x7fff. Port: core/pk_rand.c.
+
+The defender's seed: 0x10028e00 (the kind 0 event with e[6] = 2) calls
+FUN_10071500 with byte 3 of the kept 9 (game+0x1aa24), the attacker's
+seed, after it has loaded formation 0xd: word 0 = [2] of the 9, word 1 =
+[36], the units @40. The defender's own 10 handler (FUN_10066de0) only
+clears events 9 / 7 and starts the kind 0 event (FUN_10070da0 with the
+10's tag, e[6] = 2).
+
+Both games seed the generator alike, but the battle is not guaranteed
+to come out the same: FUN_10068a34 creates the unit objects of record
+side 0 (the own party) first, so the attacker's and the defender's games
+run the same units in a different order. The port behaves the same
+(tested: same seed, equal unit records, different battles).
+
+After a battle against a rival base (formation word 47 = 1, 0x1000dcc4)
+the base is not destroyed (only word 47 = 0 bases are, FUN_1000ca84 with
+area words 2 - 1 and 3 + 1). Online, FUN_1006781c builds message 22
+there (32 bytes: [1] battlefield, [2] +0x99c, [4..7] / [8..11] the unit
+types of both record sides, @12 the opponent's name, [28] +0x498, [29] 1
+when the time ran out, [30] / [31] the highest record word 14 of each
+side); PhantomLink lists 22 as never received, the port does not send it.
+
+Going offline (FUN_100723e0): area word 1 of the current area = 0,
+FUN_1000c9b8, every event with byte [11] = 1 is dropped, every party is
+free again (team word 12 = 0 for all eight), +0xe4 = 0, then the save.
 
 ## Global Auction (0x1002a544)
 
@@ -917,3 +1090,51 @@ surviving unit carries effect 0x30: then each piece is unequipped and kept
 on a coin toss. An empty team is reset (FUN_100693a4), otherwise f9 is the
 first occupied slot and f10 the highest f14 (FUN_10051a18). Units and
 equipment are re-sorted (FUN_1007a018, FUN_10061b4c).
+
+## Event handler 0x10028538 (decoded with tools/re/armdis.py)
+
+The handler runs as the screen's own object (+0x38 = event index; events
+are 13 words at game+0x7394: [2] kind, [3] team, [6] area, [7] target
+type, [8] slot, [9] side, [10] base serial, [12] flag). The kingdom
+(0x10024b4c) installs it with +0x28 = 1, the map (0x1003f0f4) with
++0x28 = 2. State 2 announces (kind 0 rival: trigger 0x23 or 0x22, kind 0:
+0x1b; kinds 1..4 and 8: 0x16 with the leader's name), state 3 closes the
+curtain (open curtain for kind 10) and sets game+0x110 = 2, state 4:
+
+- kind 4, and every kind without its own case (9, 11; 6 and 7 never
+  get here): the search report 0x10059514, which does not look at the
+  kind. FUN_10063f40 finds nothing unless event word 6 (which
+  FUN_10070c78 does not set) is the current area (+0x424).
+- kind 3: 0x100583bc. kind 2: the spot (quest spots -> 0x100525ac).
+- kind 1 with [7] == 2 (a rival's base): when [12] == 1 or byte 0xc0
+  of the formation is above 0xfc the base is gone and 0x10028fc4 runs
+  with +0x1c = 1 (byte 0xff) or 2 (the rival moved), +0x20 = word 43;
+  otherwise the slot is FUN_10071500(byte [10]). A rival formation
+  without units: FUN_1000cc40(team, slot, [9], 0), record +0x99c = 1,
+  mode 2 (no battle).
+- kind 8: 0x10028fc4 with +0x1c = 0.
+- kind 10: the 0x74 byte letter at game+0x1aa28 is kept, then 0x10032114.
+
+0x10028fc4 (states 2..5): state 2 waits for the closed curtain and three
+frames, resets the camera, opens the curtain over background 0x58 and
+spawns the window rows of the results screen (0x100583bc state 0x10, x 0,
+y 0x68 top, 0x6c..0xc8 middle, 0xcc bottom) and, when the team has a
+leader, the magic circle 0x1005f080 with the leader's type (circle, beam,
+leader at 0x58,0x5f, sfx 0x21). State 4 queues mestext 0x13f at 0x58,0x78
+(+0x1c = 0), 0x140 / 0x141 at 0x58,0xa0 / 0xb4 (1) or 0x142, the rival's
+name, 0x143 at 0x58,0x78 / 0x8c / 0xa0 (2), centred, every frame until
+key 0x35 or 0x37 (game+0x5d0 is never set). Then for 2 the rival's four
+base units become 0xff, area word 1 drops by one and FUN_1000ca84 runs;
+always: the team is free again, the event is cleared, sfx 0, curtain
+closes. State 5: kingdom (0x1002479c state 1, after FUN_1007163c) when
++0x28 == 1, else the map (0x1003db80 state 0x31).
+
+The search report's exit (0x1005a250) always goes to the map: game+0x140
+= 0, background +0x4f0, +0x18 = +0x1c = 0, 0x1003db80 state 0x31. Map
+state 0x31 (0x1003dea8, table index = state - 2) resets the camera and
++0x42c, kills the other objects and enters state 2 with counter 4 under
+the closed curtain (+0x98 = 5).
+
+Event kind 6 is the delayed area pop-up (see "Area pop-ups and event
+kinds"). FUN_10071c74 shows nothing while game+0x5c, +0x1a9f8 or +0x140
+is set.

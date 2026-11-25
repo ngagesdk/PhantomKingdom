@@ -51,15 +51,17 @@ void pk_rankup_update(pk_object *o, pk_game *g);  /* 0x10053a70 Lab > Rank Up */
 void pk_upgrade_update(pk_object *o, pk_game *g); /* 0x10045dc8 Lab > Upgrade */
 void pk_quest_update(pk_object *o, pk_game *g);   /* 0x100525ac quest spots */
 void pk_quest_begin(pk_game *g, int area, int spot, int team);
-void pk_attract_update(pk_object *o, pk_game *g);     /* 0x10036e68 attract mode */
-void pk_list_update(pk_object *o, pk_game *g);        /* 0x1003d8a0 Party > List */
-void pk_attack_list_update(pk_object *o, pk_game *g); /* 0x10043060 */
-int pk_event_start(pk_game *g, int kind, int team);   /* FUN_10070c78 */
-void pk_event_clear(pk_game *g, int index);           /* FUN_10070e28 */
-void pk_events_tick(pk_game *g);                      /* FUN_10070b20 */
-int pk_event_finished(pk_game *g);                    /* FUN_10070e6c */
-bool pk_event_handle(pk_game *g, int index);          /* 0x10028538 */
-void pk_invasion_tick(pk_game *g);                    /* FUN_10071588 */
+void pk_attract_update(pk_object *o, pk_game *g);         /* 0x10036e68 attract mode */
+void pk_list_update(pk_object *o, pk_game *g);            /* 0x1003d8a0 Party > List */
+void pk_attack_list_update(pk_object *o, pk_game *g);     /* 0x10043060 */
+int pk_event_start(pk_game *g, int kind, int team);       /* FUN_10070c78 */
+bool pk_event_take_special(pk_game *g, int ev, bool map); /* kinds 6 / 7 before 0x10028538 */
+void pk_event_clear(pk_game *g, int index);               /* FUN_10070e28 */
+void pk_event_answered(pk_game *g, int kind, int tag);    /* FUN_10070f24 */
+void pk_events_tick(pk_game *g);                          /* FUN_10070b20 */
+int pk_event_finished(pk_game *g);                        /* FUN_10070e6c */
+bool pk_event_handle(pk_game *g, int index);              /* 0x10028538 */
+void pk_invasion_tick(pk_game *g);                        /* FUN_10071588 */
 
 /* The ending and the staff roll (credits from the options). */
 void pk_mode_ending(pk_game *g); /* 0x10038208 + staff roll */
