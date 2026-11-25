@@ -1098,6 +1098,16 @@ static int upg_cost(int cat, int n)
     return 2000;
 }
 
+static void upg_confirm_hint(pk_game *g)
+{
+    char buf[24];
+    SDL_snprintf(buf, sizeof(buf), "%d", upg_cost(s_upg.cat, s_upg.cursor));
+    pk_game_mestext(g, 0x18, 0x59, 0xb5, 0, PK_ALIGN_RIGHT, 1, PK_FONT_LEGEND);
+    pk_game_mestext(g, 0x18, 0x58, 0xb4, 0xFFFFFFu, PK_ALIGN_RIGHT, 1, PK_FONT_LEGEND);
+    pk_drawq_text_utf8(&g->drawq, buf, 0x59, 0xb5, 0, PK_ALIGN_LEFT, 1, PK_FONT_LEGEND);
+    pk_drawq_text_utf8(&g->drawq, buf, 0x58, 0xb4, 0xFFFFFFu, PK_ALIGN_LEFT, 1, PK_FONT_LEGEND);
+}
+
 static int upg_label(int cat, int n)
 {
     if (cat == 0) {
@@ -1279,7 +1289,7 @@ void pk_upgrade_update(pk_object *o, pk_game *g)
         if (g->curtain != PK_CURTAIN_NONE) {
             break;
         }
-        if (o->work[7] == 0) {
+        if (o->work[7] != 1) {
             int k;
             for (k = 0; k < 5; k++) {
                 pk_object_spawn(g, upg_panel_update, 0, 0x26, 5, k, 0x16, 0x28 + 0x14 * k);
@@ -1294,17 +1304,29 @@ void pk_upgrade_update(pk_object *o, pk_game *g)
                 pk_object_spawn(g, upg_preview_update, 0, 0x2a, 0, 0x10 + k, 0x83, 0x24);
             }
             pk_object_spawn(g, upg_preview_update, 0, 0x2a, 0, 0x20, 0x58, 0x24);
-            pk_help(g, 1, 0x21);
+            if (o->work[7] == 0) {
+                pk_help(g, 1, 0x21);
+            }
             o->work[7] = 1;
         }
         upg_draw(g);
         if (pk_help_active()) {
             break;
         }
-        { /* touch: the plates */
+        {
             int c = s_upg.cursor;
-            if (pk_tap_rows(g, 0x16, 0x28, 0x84, 0x14, s_upg.level == 0 ? 4 : upg_count(s_upg.cat), &c)) {
+            int y = s_upg.level == 0 ? 0x28 : 0x41;
+            int h = s_upg.level == 0 ? 0x14 : 0x10;
+            if (pk_tap_rows(g, 0x16, y, 0x84, h, s_upg.level == 0 ? 4 : upg_count(s_upg.cat), &c)) {
                 s_upg.cursor = c;
+                if (s_upg.level == 1) {
+                    g->dlg_type = 0xc;
+                    g->list_top = g->cursor = 0;
+                    g->slide = 0;
+                    g->dlg_hint = upg_confirm_hint;
+                    pk_object_call(g, o, pk_dialog_update, 0, pk_upgrade_update, 0x14);
+                    break;
+                }
             }
         }
         if (g->key_code == PK_SC_UP || g->key_code == PK_SC_DOWN) {
@@ -1331,6 +1353,15 @@ void pk_upgrade_update(pk_object *o, pk_game *g)
                 o->state = 0x20;
             }
         }
+        break;
+    case 0x14:
+        if (g->dlg_result == 0 && g->list_top + g->cursor == 0) {
+            upg_buy(g);
+        }
+        g->dlg_hint = NULL;
+        g->slide = 1;
+        o->work[7] = 2;
+        o->state = 0xd;
         break;
     case 0x20:
         if (g->curtain != PK_CURTAIN_HELD) {

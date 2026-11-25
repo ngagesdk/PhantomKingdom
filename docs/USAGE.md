@@ -71,6 +71,10 @@ A select, B right soft key, X/Start left soft key.
 | Long press, two-finger tap, right click, the phone's back button | right soft key (back) |
 | Tap on the letter's paper / on an amount | opens the on-screen keyboard (numbers: a numeric one) |
 
+In Lab > Upgrade, tapping an upgrade opens a Yes/No confirmation showing its
+price before spending loot. This extra touch confirmation is a port deviation;
+keyboard and gamepad selection keep the original immediate-purchase behavior.
+
 On the travel map a tap chooses a neighbouring area and a second tap (or a
 tap on the panel below) travels there. A tap elsewhere on the map chooses
 the neighbour in that direction from the kingdom, also one that is out of

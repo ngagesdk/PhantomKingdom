@@ -4,3 +4,4 @@
 - Neue Kampffallen und bessere Kampfabschlüsse mit Kampfrichtern bei Zeitablauf.
 - Gebietsmeldungen und Pop-ups verbessert.
 - Online-Missionen, Verbindungen, Chat und Zufallszahlen verbessert.
+- Upgrades müssen vor dem Ausgeben von Loot bestätigt werden.

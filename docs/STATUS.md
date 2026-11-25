@@ -32,6 +32,9 @@ N-Gage Arena through PhantomLink works (tested with two players).
   (the "False alarm" report) is not started.
 - Online message 22 (a battle result the original builds after a battle
   against a rival) is not sent; PhantomLink does not expect it.
+- In Lab > Upgrade, touch-selecting an upgrade asks for Yes/No confirmation
+  before spending loot; the original does not. Keyboard selection retains the
+  original immediate-purchase behavior.
 - The Upgrade screen and the detail screens 0x1003c224 / 0x1005fc0c are
   drawn as text.
 - The pop-up function does not check game+0x5c / +0x140, and area pop-ups

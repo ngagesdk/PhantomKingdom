@@ -4,4 +4,5 @@
 - Added battle traps and improved endings, including judges at timeout.
 - Restored unlocked area announcements and improved pop-ups.
 - Improved online missions, connections, chat and random number generation.
+- Confirm touch upgrades with price shown.
 - General maintenance and build improvements.

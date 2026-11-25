@@ -5,7 +5,9 @@
 
 #include "core/pk_text.h"
 #include "engine/pk_game.h"
+#include "game/pk_scenes.h"
 #include "game/pk_world.h"
+#include "game/ui_dialog.h"
 #include "gfx/pk_font.h"
 #include "gfx/pk_mbm.h"
 #include "input/pk_input.h"
@@ -230,6 +232,109 @@ static void test_touch(void)
     CHECK(pk_swipe_list(&g, &top, &cur, 12, 5) && top == 7);
 }
 
+static void upgrade_test_tick(pk_game *g)
+{
+    pk_drawq_reset(&g->drawq);
+    pk_objects_update(g);
+    pk_objects_reap(g);
+    g->key_code = PK_SC_NONE;
+}
+
+static int upgrade_test_count(pk_game *g, int state)
+{
+    int i, n = 0;
+    for (i = 0; i < g->objects->count; i++) {
+        if (g->objects->items[i]->state == state) {
+            n++;
+        }
+    }
+    return n;
+}
+
+static void test_upgrade_confirmation(void)
+{
+    static pk_game g;
+    pk_object *root, *row;
+    int i, price_found;
+    pk_game_init(&g);
+    root = pk_object_spawn(&g, pk_upgrade_update, 0xc2, 0xc, 0, 0, 0, 0);
+    CHECK(root != NULL);
+    if (!root) {
+        pk_game_shutdown(&g);
+        return;
+    }
+    g.curtain = PK_CURTAIN_HELD;
+    root->counter = 3;
+    upgrade_test_tick(&g);
+    g.curtain = PK_CURTAIN_NONE;
+    g.loot = 10000;
+    g.world.h_4e4 = 0;
+    upgrade_test_tick(&g);
+    g.tap = 1;
+    g.tap_x = 0x20;
+    g.tap_y = 0x28 + 3 * 0x14;
+    upgrade_test_tick(&g);
+    upgrade_test_tick(&g);
+    CHECK(upgrade_test_count(&g, 0x26) == 5);
+    CHECK(upgrade_test_count(&g, 0x2a) == 9);
+
+    /* The bottom of the second displayed row must still select that row. */
+    g.tap = 1;
+    g.tap_x = 0x20;
+    g.tap_y = 0x41 + 0x10 + 0xd;
+    upgrade_test_tick(&g);
+    CHECK(root->update == pk_dialog_update && g.loot == 10000);
+    CHECK(upgrade_test_count(&g, 0x26) == 0 && upgrade_test_count(&g, 0x2a) == 0);
+    root->state = 2;
+    g.dlg_count = 2;
+    upgrade_test_tick(&g);
+    price_found = 0;
+    for (i = 0; i < g.drawq.text_count; i++) {
+        const Uint16 *text = g.drawq.text[i].text;
+        if (text[0] == '2' && text[1] == '0' && text[2] == '0' && text[3] == '0' && text[4] == 0) {
+            price_found = 1;
+        }
+    }
+    CHECK(price_found);
+    g.cursor = 1;
+    g.key_code = PK_SC_5;
+    upgrade_test_tick(&g);
+    upgrade_test_tick(&g);
+    upgrade_test_tick(&g);
+    upgrade_test_tick(&g);
+    row = pk_object_find(&g, 0, 5, 1);
+    CHECK(root->update == pk_upgrade_update && g.loot == 10000 && g.world.h_4e4 == 0);
+    CHECK(upgrade_test_count(&g, 0x26) == 5 && upgrade_test_count(&g, 0x2a) == 9);
+    CHECK(row && row->y == 0x51 && row->frame == 0x3d);
+    CHECK(g.dlg_hint == NULL);
+
+    /* Back also restores the menu; confirming buys the selected row once. */
+    for (i = 0; i < 2; i++) {
+        g.tap = 1;
+        g.tap_x = 0x20;
+        g.tap_y = 0x5e;
+        upgrade_test_tick(&g);
+        CHECK(root->update == pk_dialog_update && g.loot == 10000);
+        root->state = 2;
+        g.dlg_count = 2;
+        g.cursor = 0;
+        g.key_code = i == 0 ? PK_SC_BACK : PK_SC_5;
+        upgrade_test_tick(&g);
+        upgrade_test_tick(&g);
+        upgrade_test_tick(&g);
+        upgrade_test_tick(&g);
+        CHECK(upgrade_test_count(&g, 0x26) == 5 && upgrade_test_count(&g, 0x2a) == 9);
+        CHECK(g.loot == (i == 0 ? 10000 : 8000));
+        CHECK(g.world.h_4e4 == (i == 0 ? 0 : 4));
+    }
+    g.key_code = PK_SC_DOWN;
+    upgrade_test_tick(&g);
+    g.key_code = PK_SC_5;
+    upgrade_test_tick(&g);
+    CHECK(root->update == pk_upgrade_update && g.loot == 6000 && g.world.h_4e4 == 8);
+    pk_game_shutdown(&g);
+}
+
 static void test_smooth(void)
 {
     static pk_game g;
@@ -304,6 +409,7 @@ int main(int argc, char **argv)
     test_font();
     test_world();
     test_touch();
+    test_upgrade_confirmation();
     test_smooth();
     SDL_Log("%d checks, %d failed", g_run, g_fail);
     return g_fail ? 1 : 0;
