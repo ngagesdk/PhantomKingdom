@@ -2,5 +2,4 @@
 - Weitere Kampffallen hinzugefügt und Kampfabschlüsse verbessert, einschließlich Kampfrichtern bei Zeitablauf.
 - Meldungen zu neu freigeschalteten Gebieten wiederhergestellt und Gebiets-Pop-ups verbessert.
 - Online-Missionen, Verbindungsverwaltung, Chat und Zufallszahlengenerator verbessert.
-- Vibration auch ohne System-Touchfeedback.
 - Wartung und Build verbessert.

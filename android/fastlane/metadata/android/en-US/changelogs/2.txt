@@ -2,5 +2,4 @@
 - Added more battle traps and improved battle endings, including judges when time runs out.
 - Restored newly unlocked area announcements and improved area pop-ups.
 - Improved online mission and connection handling, chat and random number generation.
-- Game vibration works without system touch feedback.
 - General maintenance and build improvements.

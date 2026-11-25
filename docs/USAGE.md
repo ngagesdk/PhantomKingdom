@@ -64,18 +64,17 @@ A select, B right soft key, X/Start left soft key.
 | Long press, two-finger tap, right click, the phone's back button | right soft key (back) |
 | Tap on the letter's paper / on an amount | opens the on-screen keyboard (numbers: a numeric one) |
 
-On the travel map, tap beside the kingdom in the direction of an unlocked
-neighbour to travel there, even if it is off-screen or on another page. You
-can also tap a visible area to select it, then tap it again or tap the panel
-to travel. Swipe to cycle through unlocked neighbours.
+On the travel map a tap chooses a neighbouring area and a second tap (or a
+tap on the panel below) travels there. A tap elsewhere on the map chooses
+the neighbour in that direction from the kingdom, also one that is out of
+view or on another page.
 
 With touch input the phone gives a short vibration when the game takes a
 tap, a swipe step or a back gesture (long press, two-finger tap), so you
-know the touch counted; a tap that hits nothing gives none. On Android,
-this uses the vibrator independently of the system touch-feedback setting.
-Android's overall vibration, media vibration and power settings can still
-suppress it. Mouse input never vibrates. `--no-haptics` turns it off
-(Android: start screen, Settings, "Vibrate on touch").
+know the touch counted; a tap that hits nothing gives none. On Android
+this is the system's touch feedback (it follows the "Touch feedback"
+setting). Mouse input never vibrates. `--no-haptics` turns it off (Android: start screen,
+Settings, "Vibrate on touch").
 
 ## Online
 

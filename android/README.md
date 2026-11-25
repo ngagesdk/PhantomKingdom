@@ -25,10 +25,6 @@ Tabs: **Game** (play, status, import), **Log**, **Settings**.
 | Imported game data | `--data <folder with 6rah.app>` | not passed for data copied over USB |
 | Vibrate on touch | `--no-haptics` when off | on |
 
-Game vibrations do not require system touch feedback to be enabled. Android's
-master vibration setting, media vibration setting or battery saver can still
-suppress them.
-
 The game saves host, user and password in `arena.cfg` itself
 (`pk_arena_set_account`). The Settings tab shows the game's IMEI from
 `identity.cfg` (created by the game on its first start; the start screen
