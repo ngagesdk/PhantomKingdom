@@ -27,9 +27,9 @@ Tabs: **Game** (play, status, import), **Log**, **Settings**.
 
 The game saves host, user and password in `arena.cfg` itself
 (`pk_arena_set_account`). The Settings tab shows the game's IMEI from
-`identity.cfg` (created by the game on its first start; the start screen
-only reads it). The server test opens a TCP connection to port 80 (the
-Arena login) and closes it.
+`identity.cfg` (created by the game on its first start). Restoring a save
+backup replaces this identity too. The server test opens a TCP connection
+to port 80 (the Arena login) and closes it.
 
 The game runs in its own process (`:game`), which ends when the game
 closes (`PocketKingdomActivity.onDestroy`), so the native code's static
@@ -59,6 +59,33 @@ more than 4 GB are refused. Saves, `identity.cfg` and `arena.cfg` (also in
 `files/`) are never touched, and are included in Android backups; the
 imported game data is not (`res/xml/backup_rules.xml`,
 `res/xml/data_extraction_rules.xml`).
+
+## Save backups
+
+In **Settings > Save backup**, close the game completely, then choose
+**Export save** and save the ZIP somewhere outside the app. Copy it to
+another device or cloud storage before uninstalling. To restore it, choose
+**Restore save**, confirm replacement, and select the ZIP. Both `save.dat`
+and `identity.cfg` are restored, so the N-Gage ID and its PhantomLink
+account binding move with the save. Arena credentials, settings, and game
+data are not included. Export the current save first if you want to keep it.
+
+The ZIP contains encrypted save data with its salt appended and the matching
+`identity.cfg`. Because the ID is included alongside the save, this does not
+provide confidentiality or prevent tampering; keep the backup private. Only
+backups containing encrypted saves are accepted. To import an original N-Gage
+save, select `save.dat` with **Restore save**, select the matching four-byte
+`C:\System\Shareddata\101fd3dd.ini` from the same phone, and enter that
+phone's 15-digit IMEI. The app decrypts and checks the save before replacing
+the current save and identity. The IMEI cannot be recovered from the files.
+A ZIP backup is checked and restored with its saved identity without prompting.
+
+To move a save to a phone, choose **Export for N-Gage**. Extract the ZIP and
+copy `save.dat` to the phone's `System\Apps\6RAH` save folder and
+`101fd3dd.ini` to `C:\System\Shareddata`. The phone's IMEI must match the
+ID stored in the app. Export does not change the app's identity. Keep separate
+backups of both original phone files before replacing them. Android backup may
+also preserve saves and identity, subject to device backup settings.
 
 ## Controls
 

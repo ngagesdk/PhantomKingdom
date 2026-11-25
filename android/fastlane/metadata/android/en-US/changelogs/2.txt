@@ -1,3 +1,4 @@
+- It can now import and export original N-Gage save files
 - Reworked online rival kingdoms: search for, scout and attack rival bases.
 - Added more battle traps and improved battle endings, including judges when time runs out.
 - Restored newly unlocked area announcements and improved area pop-ups.

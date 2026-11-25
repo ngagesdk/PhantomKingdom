@@ -3,6 +3,7 @@ package de.ngagesdk.phantomkingdom;
 
 import android.content.Context;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.os.VibratorManager;
@@ -12,6 +13,11 @@ import android.view.HapticFeedbackConstants;
 import android.view.View;
 
 import org.libsdl.app.SDLActivity;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.channels.FileLock;
 
 /* The game is native code (libmain.so, built from the top-level CMake
  * project); SDL's activity loads it and runs SDL_main.
@@ -23,6 +29,20 @@ import org.libsdl.app.SDLActivity;
  * native code's static state is fresh on every start. */
 public class PocketKingdomActivity extends SDLActivity {
     public static final String EXTRA_ARGS = "de.ngagesdk.phantomkingdom.ARGS";
+    private RandomAccessFile lockFile;
+    private FileLock gameLock;
+
+    @Override
+    protected void onCreate(Bundle state) {
+        try {
+            lockFile = new RandomAccessFile(new File(getNoBackupFilesDir(), "game.lock"), "rw");
+            gameLock = lockFile.getChannel().lock();
+            SaveBackup.recoverUnderGameLock(this);
+        } catch (IOException e) {
+            throw new IllegalStateException("Cannot lock or recover game save files", e);
+        }
+        super.onCreate(state);
+    }
 
     @Override
     protected String[] getLibraries() {
@@ -101,6 +121,12 @@ public class PocketKingdomActivity extends SDLActivity {
     protected void onDestroy() {
         boolean closing = isFinishing();
         super.onDestroy();
+        try {
+            if (gameLock != null) gameLock.release();
+            if (lockFile != null) lockFile.close();
+        } catch (IOException e) {
+            Log.e(TAG, "Could not release game save lock", e);
+        }
         if (closing) {
             // Only the game's process: the start screen keeps running.
             System.exit(0);

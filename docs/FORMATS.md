@@ -124,13 +124,14 @@ A glyph is drawn at pen x + xoffset, top = baseline - base + yoffset.
 Multi-byte values are big endian unless noted. The last 4 bytes are a
 CRC-32 (polynomial 0x04c11db7, reflected) of the rest.
 
-On the phone the file is 0x2958 + 4 bytes: the 0x2958 bytes are
-encrypted with Blowfish (standard tables, ECB, each 8-byte block read as
-two little-endian words; FUN_10011038 key schedule, FUN_100113c4 /
-FUN_10011600) and followed by a random 4-byte salt. The key is the
-phone's IMEI as text followed by the salt (FUN_1007507c / FUN_10075e80).
-The port writes the file unencrypted and imports a phone save when it is
-started with that phone's IMEI (--imei).
+On the phone `save.dat` is 0x2958 bytes encrypted with Blowfish (standard
+tables, ECB, each 8-byte block read as two little-endian words;
+FUN_10011038 key schedule, FUN_100113c4 / FUN_10011600). A separate random
+4-byte salt is stored in `C:\System\Shareddata\101fd3dd.ini` (FUN_10077810,
+FUN_10077880, FUN_100778c8). The key is the phone's IMEI as text followed
+by the salt (FUN_1007507c / FUN_10075e80). The port writes its own save
+unencrypted and expects an imported phone save with the salt appended
+(0x295c bytes), together with the phone's IMEI (--imei).
 
 | Offset | Size | Content |
 |---|---|---|

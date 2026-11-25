@@ -40,8 +40,15 @@ own privacy terms apply to it.
   have it turned on, so your kingdom survives a phone change.
 - A log of app events, kept in memory while the app runs. It is only
   shared if you tap "Share log" yourself.
+- If you choose "Export save", a ZIP containing an encrypted save and its
+  N-Gage ID is written to the location you select. The ZIP itself is not
+  encrypted, so anyone with it has the ID needed to decrypt the save. "Export
+  for N-Gage" writes a ZIP containing an encrypted save and its separate salt,
+  using the app's stored N-Gage ID. Neither is uploaded by the app; your chosen storage provider handles the file under
+  its own terms.
 
-Uninstalling the app deletes all of it.
+Uninstalling the app deletes its private data, but not a separately exported
+backup.
 
 ## Permissions
 

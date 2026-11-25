@@ -52,6 +52,10 @@ fun SettingsScreen(
     imei: String?,
     versionName: String,
     onChange: ((AppSettings) -> AppSettings) -> Unit,
+    onExportSave: () -> Unit,
+    onRestoreSave: () -> Unit,
+    onExportPhone: () -> Unit,
+    saveBusy: Boolean,
     contentPadding: PaddingValues,
 ) {
     Column(
@@ -131,9 +135,26 @@ fun SettingsScreen(
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "PhantomLink binds your Arena account to this number, like to an N-Gage's IMEI. " +
-                        "It is random and stays the same until the app is uninstalled.",
+                        "It is randomly generated and can be replaced by restoring a save backup.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+
+        SectionTitle("Save backup")
+        PlainCard {
+            Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
+                Text(
+                    "Export an encrypted save and N-Gage ID together before uninstalling. Restore a backup or an " +
+                        "encrypted N-Gage save; both replace your current save and ID. Close the game first.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row {
+                    TextButton(onClick = onExportSave, enabled = !saveBusy) { Text("Export save") }
+                    TextButton(onClick = onRestoreSave, enabled = !saveBusy) { Text("Restore save") }
+                }
+                TextButton(onClick = onExportPhone, enabled = !saveBusy) { Text("Export for N-Gage") }
+                if (saveBusy) Text("Working…", style = MaterialTheme.typography.bodySmall)
             }
         }
 
