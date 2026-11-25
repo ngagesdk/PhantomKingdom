@@ -9,10 +9,9 @@
  * It only adds feedback: nothing the game shows or does changes.
  *
  * Feedback is given only while the pointer is a finger (never for the
- * mouse) and not with --no-haptics. On Android it is the system's touch
- * feedback (follows the "Touch feedback" setting, no permission needed);
- * elsewhere an SDL haptic device with rumble, if there is one. The
- * values of pk_haptic are passed to Java (PocketKingdomActivity.haptic):
+ * mouse) and not with --no-haptics. On Android it uses media-attributed
+ * vibrator effects; elsewhere it uses an SDL haptic device with rumble.
+ * The values of pk_haptic are passed to Java (PocketKingdomActivity.haptic):
  * keep them in step. */
 
 typedef enum pk_haptic

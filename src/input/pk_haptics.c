@@ -13,14 +13,10 @@ static Uint64 s_last_step;
 static bool s_logged_play, s_logged_mouse; /* port: one log line each (logcat: "haptics") */
 
 #ifdef SDL_PLATFORM_ANDROID
-/* Android: the system's touch feedback (View.performHapticFeedback with
- * KEYBOARD_TAP, CLOCK_TICK, LONG_PRESS), the same short clicks as the
- * keyboard and buttons. It needs no permission, is tuned for the phone's
- * motor and follows the user's "Touch feedback" setting. Raw vibrator
- * pulses (SDL haptics) of a few ms are too weak on many phones and fall
- * under the volume rules for app vibrations. The activity's
- * haptic(int) method (PocketKingdomActivity.java) takes the kinds of
- * pk_haptic. */
+/* Android: the activity's haptic(int) uses media-attributed vibrator
+ * effects, independent of the system touch-feedback setting. SDL's Android
+ * rumble does not specify a usage and short pulses can be treated as touch
+ * feedback by Android. The argument is a pk_haptic value. */
 #include <jni.h>
 
 static jobject s_activity; /* global reference */
@@ -55,7 +51,7 @@ static bool backend_init(void)
         PK_WARN("haptics: the activity has no haptic(int) method");
         return false;
     }
-    PK_INFO("haptics: Android touch feedback");
+    PK_INFO("haptics: Android vibrator (media usage)");
     return true;
 }
 
@@ -77,6 +73,8 @@ static void backend_play(pk_haptic kind)
     }
     (*env)->CallVoidMethod(env, s_activity, s_haptic_mid, (jint)kind);
     if ((*env)->ExceptionCheck(env)) {
+        PK_WARN("haptics: Android vibrator call failed (see Java exception)");
+        (*env)->ExceptionDescribe(env);
         (*env)->ExceptionClear(env);
     }
 }

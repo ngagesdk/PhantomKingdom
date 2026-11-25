@@ -1317,13 +1317,43 @@ static void move_text(pk_object *o, pk_game *g)
     pk_drawq_text(&g->drawq, line, 0x32, 0xc6, 0xFFFFFFu, PK_ALIGN_LEFT, 1, PK_FONT_LEGEND);
 }
 
-/* Touch (port): a tap near a neighbouring area on this page chooses it,
- * a tap on the arrow chooses the next neighbour, a tap on the chosen
- * area or on the panel below travels there; a swipe acts as the arrow
- * keys and Back (Android back) returns to the map. */
+/* Touch (port): tap beside the kingdom in a neighbour's direction to
+ * travel there, even across a page boundary. Visible areas can also be
+ * selected, and the panel confirms the selection. */
 static void move_touch(pk_object *o, pk_game *g)
 {
     int cur = g->world.current_area, n = (int)pk_app_i32(TBL_AREA_NEXT + (Uint32)cur * 0x24u), k;
+    int best = -1, best_dist = 0;
+    int origin_x = o->x - g->cam_x, origin_y = o->y - g->cam_y;
+
+    if (pk_tap_peek(g, 0, 0x10, PK_SCREEN_W, 0xa2 - 0x10)) {
+        for (k = 0; k < n; k++) {
+            Uint32 entry = TBL_AREA_NEXT + (Uint32)cur * 0x24u + (Uint32)k * 8u;
+            int a = (int)pk_app_i32(entry + 4u), d = (int)pk_app_i32(entry + 8u);
+            int x, y, dx, dy, dist;
+            if (a < 0 || a >= PK_AREAS || !g->world.areas[a][36] || d < 0 || d >= 8) {
+                continue;
+            }
+            x = origin_x + (int)pk_app_i32(TBL_ARROW_OFF + (Uint32)d * 8u);
+            y = origin_y + (int)pk_app_i32(TBL_ARROW_OFF + (Uint32)d * 8u + 4u);
+            dx = g->tap_x - x;
+            dy = g->tap_y - y;
+            if (dx < -10 || dx >= 10 || dy < -10 || dy >= 10) {
+                continue;
+            }
+            dist = dx * dx + dy * dy;
+            if (best < 0 || dist < best_dist) {
+                best = k;
+                best_dist = dist;
+            }
+        }
+        if (best >= 0 && pk_tap(g, 0, 0x10, PK_SCREEN_W, 0xa2 - 0x10)) {
+            g->cursor = best;
+            o->work[MV_SEL] = (int)pk_app_i32(TBL_AREA_NEXT + (Uint32)cur * 0x24u + (Uint32)(best * 8 + 4));
+            g->key_code = PK_SC_5;
+            return;
+        }
+    }
     for (k = 0; k < n; k++) {
         int a = (int)pk_app_i32(TBL_AREA_NEXT + (Uint32)cur * 0x24u + (Uint32)(k * 8 + 4));
         int x, y;
@@ -1341,14 +1371,6 @@ static void move_touch(pk_object *o, pk_game *g)
             pk_audio_play_sfx(2);
             g->cursor = k;
             o->work[MV_SEL] = a;
-        }
-    }
-    if (o->work[MV_SEL] != cur) { /* the arrow: the next neighbour (one on another page too) */
-        int d = (int)pk_app_i32(TBL_AREA_NEXT + (Uint32)cur * 0x24u + (Uint32)g->cursor * 8u + 8u);
-        int x = o->x + (int)pk_app_i32(TBL_ARROW_OFF + (Uint32)d * 8u) - g->cam_x;
-        int y = o->y + (int)pk_app_i32(TBL_ARROW_OFF + (Uint32)d * 8u + 4u) - g->cam_y;
-        if (pk_tap(g, x - 0xa, y - 0xa, 0x14, 0x14)) {
-            g->key_code = PK_SC_RIGHT;
         }
     }
     if (pk_tap(g, 0, 0xa2, PK_SCREEN_W, PK_SCREEN_H - 0xa2)) {

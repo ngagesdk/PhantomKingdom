@@ -3,8 +3,11 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
+#include "core/pk_app.h"
+#include "core/pk_fs.h"
 #include "core/pk_text.h"
 #include "engine/pk_game.h"
+#include "game/pk_scenes.h"
 #include "game/pk_world.h"
 #include "gfx/pk_font.h"
 #include "gfx/pk_mbm.h"
@@ -230,6 +233,211 @@ static void test_touch(void)
     CHECK(pk_swipe_list(&g, &top, &cur, 12, 5) && top == 7);
 }
 
+static void test_move_touch(void)
+{
+    static const char *files[] = { "pokekin.mbm", "pokeport.mbm", "mestext.dat", "unit.dat", "itemdata.dat",
+                                   "mapinfo.dat", "partydata.dat", "unitcol.dat", "name.dat", "bgm01.pcm",
+                                   "sys01.pcm", "english/mestext.dat", "6rah.app" };
+    static const int offsets[8][2] = { { 0, -24 }, { 16, -16 }, { 24, 0 }, { 16, 16 },
+                                       { 0, 24 }, { -16, 16 }, { -24, 0 }, { -16, -16 } };
+    static pk_game g;
+    pk_object o;
+    char root[PK_PATH_MAX], path[PK_PATH_MAX];
+    char *pref = SDL_GetPrefPath("PhantomLink", "tests");
+    Uint8 *app = NULL, *code;
+    SDL_PathInfo info;
+    bool ok = pref != NULL;
+    int i;
+
+    CHECK(ok);
+    if (!ok) {
+        return;
+    }
+    SDL_snprintf(root, sizeof(root), "%smove-touch-%llu", pref, (unsigned long long)SDL_GetTicksNS());
+    SDL_free(pref);
+    ok = !SDL_GetPathInfo(root, &info) && SDL_CreateDirectory(root);
+    CHECK(ok);
+    if (!ok) {
+        return;
+    }
+    SDL_snprintf(path, sizeof(path), "%s/english", root);
+    ok = SDL_CreateDirectory(path);
+    app = (Uint8 *)SDL_calloc(1, 0x80 + 0x96d60);
+    if (!app) {
+        ok = false;
+    }
+    if (ok) {
+        put32(app + 8, 0x101fd3dd);
+        put32(app + 0x10, 0x434f5045);
+        put32(app + 0x18, 0x19024f41);
+        put32(app + 0x30, 0x96d60);
+        put32(app + 0x4c, PK_APP_CODE_BASE);
+        put32(app + 0x64, 0x80);
+        code = app + 0x80;
+        for (i = 0; i < 8; i++) {
+            put32(code + 0x96d20 + i * 8, (Uint32)offsets[i][0]);
+            put32(code + 0x96d24 + i * 8, (Uint32)offsets[i][1]);
+        }
+        /* Area 1 has north, south-east (off page), south-west and north-west neighbours. */
+        put32(code + 0x96738, 1);
+        put32(code + 0x9673c, 1);
+        put32(code + 0x96740, 4);
+        put32(code + 0x96738 + 36, 4);
+        put32(code + 0x96738 + 36 + 4, 0);
+        put32(code + 0x96738 + 36 + 8, 0);
+        put32(code + 0x96738 + 36 + 12, 2);
+        put32(code + 0x96738 + 36 + 16, 3);
+        put32(code + 0x96738 + 36 + 20, 3);
+        put32(code + 0x96738 + 36 + 24, 5);
+        put32(code + 0x96738 + 36 + 28, 4);
+        put32(code + 0x96738 + 36 + 32, 7);
+        put32(code + 0x96338 + 4, 100);
+        put32(code + 0x96338 + 8, 20);
+        put32(code + 0x96338 + 16 + 4, 100);
+        put32(code + 0x96338 + 16 + 8, 100);
+        put32(code + 0x96338 + 32, 1);
+        put32(code + 0x96338 + 32 + 4, 300);
+        put32(code + 0x96338 + 32 + 8, 160);
+        put32(code + 0x96338 + 32 + 12, 20);
+        put32(code + 0x96338 + 48 + 4, 40);
+        put32(code + 0x96338 + 48 + 8, 160);
+        for (i = 0; i < (int)SDL_arraysize(files) && ok; i++) {
+            SDL_snprintf(path, sizeof(path), "%s/%s", root, files[i]);
+            ok = i == (int)SDL_arraysize(files) - 1 ? SDL_SaveFile(path, app, 0x80 + 0x96d60)
+                                                       : SDL_SaveFile(path, "", 1);
+        }
+    }
+    SDL_free(app);
+    CHECK(ok);
+    if (ok) {
+        ok = pk_fs_init(root) && pk_app_load();
+        CHECK(ok);
+    }
+    if (ok) {
+        pk_game_init(&g);
+        SDL_zero(o);
+        o.type = 0xc2;
+        o.state = 3;
+        o.x = 100;
+        o.y = 100;
+        o.work[6] = 2;
+        g.world.current_area = 1;
+        g.world.areas[0][36] = g.world.areas[1][36] = g.world.areas[2][36] = 1;
+        g.cam_x = 10;
+        g.cam_y = 15;
+        g.loot = 100;
+
+        /* North selects and travels to area 0, not the preselected area 2. */
+        g.tap = 1;
+        g.tap_x = 90;
+        g.tap_y = 61;
+        pk_move_update(&o, &g);
+        CHECK(!g.tap && g.key_code == PK_SC_5 && o.state == 6 && o.work[6] == 0 && g.cursor == 0);
+        g.key_code = PK_SC_NONE;
+        pk_move_update(&o, &g);
+        for (i = 0; i < 22; i++) {
+            pk_move_update(&o, &g);
+        }
+        CHECK(o.state == 9);
+        pk_move_update(&o, &g);
+        CHECK(g.world.current_area == 0 && o.state == 3);
+
+        /* Travel back south from the first area. */
+        g.cam_y = 0;
+        g.tap = 1;
+        g.tap_x = 90;
+        g.tap_y = 44;
+        g.key_code = PK_SC_NONE;
+        pk_move_update(&o, &g);
+        CHECK(!g.tap && o.state == 6 && o.work[6] == 1);
+        g.key_code = PK_SC_NONE;
+        pk_move_update(&o, &g);
+        for (i = 0; i < 22; i++) {
+            pk_move_update(&o, &g);
+        }
+        CHECK(o.state == 9);
+        pk_move_update(&o, &g);
+        CHECK(g.world.current_area == 1 && o.state == 3);
+
+        /* Off-page neighbours are reachable without first selecting them. */
+        o.work[6] = 0;
+        g.cam_y = 15;
+        g.tap = 1;
+        g.tap_x = 106;
+        g.tap_y = 101;
+        g.key_code = PK_SC_NONE;
+        pk_move_update(&o, &g);
+        CHECK(!g.tap && o.state == 6 && o.work[6] == 2 && g.cursor == 1 && g.loot == 80);
+
+        o.state = 3;
+        g.tap = 1;
+        g.tap_x = 74;
+        g.tap_y = 101;
+        g.key_code = PK_SC_NONE;
+        pk_move_update(&o, &g);
+        CHECK(g.tap && o.state == 3 && o.work[6] == 2); /* area 3 is locked */
+
+        g.loot = 20;
+        g.tap = 1;
+        g.tap_x = 106;
+        g.tap_y = 101;
+        g.key_code = PK_SC_NONE;
+        pk_move_update(&o, &g);
+        CHECK(!g.tap && o.state == 3 && g.loot == 20); /* cannot afford area 2 */
+
+        g.loot = 100;
+        g.tap = 1;
+        g.tap_x = 10;
+        g.tap_y = 0xb0;
+        g.key_code = PK_SC_NONE;
+        pk_move_update(&o, &g);
+        CHECK(!g.tap && o.state == 6 && o.work[6] == 2 && g.loot == 80);
+
+        /* Overlapping hit boxes choose the nearest direction. */
+        o.state = 3;
+        g.world.areas[4][36] = 1;
+        g.tap = 1;
+        g.tap_x = 81;
+        g.tap_y = 67;
+        g.key_code = PK_SC_NONE;
+        pk_move_update(&o, &g);
+        CHECK(!g.tap && o.state == 6 && o.work[6] == 4 && g.cursor == 3);
+
+        /* Visible areas still select first and travel on the second tap. */
+        o.state = 3;
+        g.world.areas[3][36] = 1;
+        g.tap = 1;
+        g.tap_x = 30;
+        g.tap_y = 145;
+        g.key_code = PK_SC_NONE;
+        pk_move_update(&o, &g);
+        CHECK(!g.tap && o.state == 3 && o.work[6] == 3 && g.cursor == 2);
+        g.tap = 1;
+        g.key_code = PK_SC_NONE;
+        pk_move_update(&o, &g);
+        CHECK(!g.tap && o.state == 6 && o.work[6] == 3);
+
+        o.state = 3;
+        g.key_code = PK_SC_RIGHT;
+        pk_move_update(&o, &g);
+        CHECK(o.state == 3 && o.work[6] == 4 && g.cursor == 3);
+        pk_game_shutdown(&g);
+    }
+    pk_app_unload();
+    pk_fs_quit();
+    for (i = 0; i < (int)SDL_arraysize(files); i++) {
+        SDL_snprintf(path, sizeof(path), "%s/%s", root, files[i]);
+        if (SDL_GetPathInfo(path, &info)) {
+            CHECK(SDL_RemovePath(path));
+        }
+    }
+    SDL_snprintf(path, sizeof(path), "%s/english", root);
+    if (SDL_GetPathInfo(path, &info)) {
+        CHECK(SDL_RemovePath(path));
+    }
+    CHECK(SDL_RemovePath(root));
+}
+
 int main(int argc, char **argv)
 {
     (void)argc;
@@ -242,6 +450,7 @@ int main(int argc, char **argv)
     test_font();
     test_world();
     test_touch();
+    test_move_touch();
     SDL_Log("%d checks, %d failed", g_run, g_fail);
     return g_fail ? 1 : 0;
 }
