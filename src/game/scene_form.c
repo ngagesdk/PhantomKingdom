@@ -1551,7 +1551,7 @@ void pk_form_update(pk_object *o, pk_game *g)
     case 0x15: /* Weapons / Armor / Accessories */
         if (g->dlg_result != 0) {
             g->slide = 1;
-            to_edit(o, g);
+            to_edit(o);
             break;
         }
         g->dlg_type = 5 + g->cursor;
