@@ -32,7 +32,9 @@ static void send(const char *method, const char *signature, int a, int b)
     } else if (!mid) {
         PK_WARN("play games: Android method %s unavailable", method);
     }
-    if (cls) (*env)->DeleteLocalRef(env, cls);
+    if (cls) {
+        (*env)->DeleteLocalRef(env, cls);
+    }
     (*env)->DeleteLocalRef(env, activity);
 }
 
@@ -40,5 +42,9 @@ void pk_play_games_treasures(int mask) { send("playGamesTreasures", "(I)V", mask
 void pk_play_games_ranked_result(int won, int owned) { send("playGamesRankedResult", "(II)V", won, owned); }
 #else
 void pk_play_games_treasures(int mask) { (void)mask; }
-void pk_play_games_ranked_result(int won, int owned) { (void)won; (void)owned; }
+void pk_play_games_ranked_result(int won, int owned)
+{
+    (void)won;
+    (void)owned;
+}
 #endif

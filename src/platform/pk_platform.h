@@ -2,8 +2,8 @@
 #ifndef PK_PLATFORM_H
 #define PK_PLATFORM_H
 
-#include <stdbool.h>
 #include <SDL3/SDL_stdinc.h>
+#include <stdbool.h>
 
 typedef struct pk_platform_config
 {

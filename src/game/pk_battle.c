@@ -2200,8 +2200,12 @@ void pk_mode_result(pk_game *g)
     if (pk_world_save(g)) {
         int owned = 0;
         pk_play_games_treasures(g->world.h_444);
-        for (i = 0; i < 4; i++) owned += pk_b.opponent_owned[i];
-        if (pk_b.ranked_pvp) pk_play_games_ranked_result(pk_b.won, owned);
+        for (i = 0; i < 4; i++) {
+            owned += pk_b.opponent_owned[i];
+        }
+        if (pk_b.ranked_pvp) {
+            pk_play_games_ranked_result(pk_b.won, owned);
+        }
     }
     pk_game_set_phase(g, 1);
 }
