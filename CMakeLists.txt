@@ -107,6 +107,7 @@ set(PK_CORE_SOURCES
     src/net/pk_online.c
     src/net/pk_arena.c
     src/platform/pk_platform.c
+    src/platform/pk_play_games.c
 )
 
 add_library(pkcore STATIC ${PK_CORE_SOURCES})

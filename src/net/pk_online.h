@@ -27,12 +27,14 @@ typedef enum pk_online_state
 /* Play Now mode: the lobby and room "Scrimmage" (default) or "Ranked". */
 void pk_online_set_room(const char *name);
 const char *pk_online_room(void);
+bool pk_online_is_ranked_server(bool online, const char *host, const char *room);
 bool pk_online_start(const char *host, const char *user, const char *password, const char *imei);
 void pk_online_update(void);
 void pk_online_stop(void);
 pk_online_state pk_online_get_state(void);
 const char *pk_online_status(void); /* a short line for the connect screen */
 const char *pk_online_user(void);   /* the account's spelling */
+const char *pk_online_host(void);
 /* Sends one game message (byte 0 type, byte 1 sequence). */
 bool pk_online_send(const Uint8 *msg, int len);
 /* Takes the next received game message; returns its length or 0. */

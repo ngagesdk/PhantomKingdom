@@ -48,6 +48,8 @@ typedef struct pk_battle
     int over;                     /* game+0x44c: everyone stops (battle over, or a special move runs) */
     int cam[4];                   /* game+0xa4..0xb0: camera mode (cam[1]) and the point to show (cam[2], cam[3]) */
     int event_kind;               /* port: what started the battle (event kind) */
+    int ranked_pvp;
+    int opponent_owned[4];
 } pk_battle;
 
 extern pk_battle pk_b;

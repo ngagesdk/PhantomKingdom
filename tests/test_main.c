@@ -13,6 +13,7 @@
 #include "input/pk_input.h"
 #include "net/pk_arena.h"
 #include "net/pk_identity.h"
+#include "net/pk_online.h"
 #include "net/pk_snap.h"
 
 static int g_fail, g_run;
@@ -25,6 +26,17 @@ static int g_fail, g_run;
             SDL_Log("FAIL %s:%d: %s", __FILE__, __LINE__, #c); \
         }                                                      \
     } while (0)
+
+static void test_ranked_server(void)
+{
+    CHECK(pk_online_is_ranked_server(true, "188.68.43.183", "Ranked"));
+    CHECK(pk_online_is_ranked_server(true, "188.68.43.183", "ranked"));
+    CHECK(!pk_online_is_ranked_server(false, "188.68.43.183", "Ranked"));
+    CHECK(!pk_online_is_ranked_server(true, "188.68.43.183", "Scrimmage"));
+    CHECK(!pk_online_is_ranked_server(true, "localhost", "Ranked"));
+    CHECK(!pk_online_is_ranked_server(true, NULL, "Ranked"));
+    CHECK(!pk_online_is_ranked_server(true, "188.68.43.183", NULL));
+}
 
 static void test_luhn(void)
 {
@@ -401,6 +413,7 @@ int main(int argc, char **argv)
 {
     (void)argc;
     (void)argv;
+    test_ranked_server();
     test_luhn();
     test_mbm();
     test_text();

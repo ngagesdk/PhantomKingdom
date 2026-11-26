@@ -529,6 +529,7 @@ static bool unit_dies(pk_game *g, pk_object *o)
         if (rs(o) == 0) pk_b.r97c[2 + s] = 1;
         return true;
     }
+    if (rs(o) == 1) pk_b.opponent_owned[s] = 1;
     FX(g, 0x4c, o->arg0, o->arg1, o->x, o->y - 0x14);
     FX(g, 0x4d, o->arg0, o->arg1, o->x, o->y - 0x14);
     return true;

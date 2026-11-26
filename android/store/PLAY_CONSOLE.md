@@ -67,11 +67,12 @@ Data safety (the final answers are yours):
   app's random N-Gage ID go to the server the user picks, which Google
   counts as collection even though the developer never receives it.
 - Encrypted in transit: No.
-- Data types: *Device or other IDs* (the random N-Gage ID) and *Personal
-  info > Name* (Arena user name, kingdom name): collected, not shared,
-  optional (online play only), purpose *App functionality*. Nothing else.
+- Review Google's Play Games Services data practices as well as the app's
+  own handling before completing Data safety. Play Games-enabled builds use
+  profile information, achievement progress and ranked PvP event totals and
+  leaderboard scores; leaderboard entries can be visible to other players.
   The imported game files stay on the device.
-- Advertising ID: No.
+- Advertising ID: review the final Play-enabled bundle and SDK disclosures.
 
 ## 4. Release
 
@@ -88,4 +89,5 @@ the upload key. Back the keystore up.
 1. Raise `versionCode` (and `versionName`) in `app/build.gradle.kts`
    (`PK_VERSION` in `src/main.c` is the game's own version).
 2. Add `fastlane/metadata/android/<lang>/changelogs/<versionCode>.txt`.
-3. `./gradlew bundleRelease`, upload, roll out.
+3. `./gradlew bundleRelease -Ppk.playGames=true`, upload, roll out. Publish
+   the Play Games Services configuration before releasing the Play build.

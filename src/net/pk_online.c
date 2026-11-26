@@ -61,6 +61,11 @@ void pk_online_set_room(const char *name)
 
 const char *pk_online_room(void) { return s_room; }
 
+bool pk_online_is_ranked_server(bool online, const char *host, const char *room)
+{
+    return online && host && room && !SDL_strcmp(host, "188.68.43.183") && !SDL_strcasecmp(room, "Ranked");
+}
+
 static void on_snap(void *ud, const pk_snap_msg *m)
 {
     (void)ud;
@@ -218,6 +223,7 @@ void pk_online_stop(void)
 pk_online_state pk_online_get_state(void) { return O.state; }
 const char *pk_online_status(void) { return O.status; }
 const char *pk_online_user(void) { return O.user; }
+const char *pk_online_host(void) { return O.host; }
 
 bool pk_online_send(const Uint8 *msg, int len)
 {

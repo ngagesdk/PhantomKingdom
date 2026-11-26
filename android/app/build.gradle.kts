@@ -65,6 +65,16 @@ android {
     namespace = "de.ngagesdk.phantomkingdom"
     compileSdk = 36
 
+    val playGames = providers.gradleProperty("pk.playGames").map { it == "true" }.getOrElse(false)
+    sourceSets.getByName("main") {
+        java.srcDir(if (playGames) "src/playGames/java" else "src/github/java")
+    }
+    if (playGames) {
+        sourceSets.getByName("main").res.srcDir("src/playGames/res")
+        sourceSets.getByName("debug").manifest.srcFile("src/playGames/AndroidManifest.xml")
+        sourceSets.getByName("release").manifest.srcFile("src/playGames/AndroidManifest.xml")
+    }
+
     defaultConfig {
         applicationId = "de.ngagesdk.phantomkingdom"
         minSdk = 24
@@ -143,6 +153,9 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.core)
+    if (providers.gradleProperty("pk.playGames").map { it == "true" }.getOrElse(false)) {
+        implementation("com.google.android.gms:play-services-games-v2:22.1.0")
+    }
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation("junit:junit:4.13.2")
 }

@@ -9,10 +9,12 @@ server. This policy explains what data the app handles.
 
 ## Summary
 
-- The app has no advertising, no analytics and no tracking.
-- The developer does not receive any data from the app.
-- Online play talks only to the PhantomLink server set in the app
+- The app has no advertising.
+- Online play talks to the PhantomLink server set in the app
   (188.68.43.183 by default, or an address you enter).
+- A Play Games-enabled Google Play build also communicates with Google for
+  sign-in, achievements and ranked leaderboard events and scores. GitHub APKs
+  do not include Play Games Services.
 
 ## Data the app sends to the server you choose
 
@@ -29,6 +31,16 @@ The server test on the start screen only opens and closes a connection; it
 sends nothing. The game protocol is not encrypted, as on the N-Gage. The
 server is run by whoever operates it, not by the app's developer; their
 own privacy terms apply to it.
+
+## Google Play Games Services
+
+In Play Games-enabled builds, Google may authenticate your Play Games profile
+and process your profile, boss treasure achievements, ranked PvP event totals
+and leaderboard scores. Other players may see leaderboard entries. Google
+handles this data under its [privacy policy](https://policies.google.com/privacy)
+and Play Games settings. The app does not require Play Games sign-in to play;
+ranked results are not recorded when you are not signed in. Manage your Play
+Games profile and game data through Google's settings or support.
 
 ## Data stored on your phone
 

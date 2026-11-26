@@ -42,6 +42,15 @@ public class PocketKingdomActivity extends SDLActivity {
             throw new IllegalStateException("Cannot lock or recover game save files", e);
         }
         super.onCreate(state);
+        PlayGamesBridge.initialize(this);
+    }
+
+    public void playGamesTreasures(int mask) {
+        PlayGamesBridge.treasures(this, mask);
+    }
+
+    public void playGamesRankedResult(int won, int owned) {
+        PlayGamesBridge.rankedResult(this, won, owned);
     }
 
     @Override

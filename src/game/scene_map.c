@@ -859,6 +859,9 @@ bool pk_event_handle(pk_game *g, int ev)
     case 0: /* enemy invasion against the defense party; e[6] == 2: a rival's
              * attack (10 from the attacker), fought here against the units of
              * its message 9 (0x10028538 state 4) */
+    {
+        bool ranked_pvp = e[6] == 2 && pk_arena_attack_msg() &&
+                          pk_online_is_ranked_server(g->arena_online, pk_online_host(), pk_online_room());
         g->boss_battle = 0;
         if (e[6] == 2 && pk_arena_attack_msg()) {
             const Uint8 *am = pk_arena_attack_msg();
@@ -894,9 +897,11 @@ bool pk_event_handle(pk_game *g, int ev)
             pk_game_set_mode(g, PK_MODE_KINGDOM);
         } else {
             pk_battle_setup(g, g->world.h_dc, 0xd, 1, 1);
+            pk_b.ranked_pvp = ranked_pvp;
             pk_game_set_mode(g, PK_MODE_BATTLE);
         }
         return true;
+    }
     case 1:
     { /* attack on an enemy base found by a search */
         int slot = e[8];
@@ -924,6 +929,7 @@ bool pk_event_handle(pk_game *g, int ev)
                 pk_b.won = 1; /* +0x99c = 1: mode 2 without a battle */
                 pk_game_set_mode(g, PK_MODE_KINGDOM);
             } else {
+                pk_b.ranked_pvp = pk_online_is_ranked_server(g->arena_online, pk_online_host(), pk_online_room());
                 pk_game_set_mode(g, PK_MODE_BATTLE);
             }
             return true;

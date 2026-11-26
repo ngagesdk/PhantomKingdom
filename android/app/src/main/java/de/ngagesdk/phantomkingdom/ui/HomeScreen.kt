@@ -59,6 +59,9 @@ fun HomeScreen(
     onRemoveData: () -> Unit,
     onTestServer: () -> Unit,
     onServerSettings: () -> Unit,
+    playGamesEnabled: Boolean,
+    onAchievements: () -> Unit,
+    onLeaderboards: () -> Unit,
     contentPadding: PaddingValues,
 ) {
     val sc = LocalStatusColors.current
@@ -71,6 +74,13 @@ fun HomeScreen(
         LogoHeader()
         Spacer(Modifier.height(12.dp))
         PlayCard(ready = game != null && !importing, onPlay = onPlay)
+        if (playGamesEnabled) {
+            SectionTitle("Google Play Games")
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(onClick = onAchievements, modifier = Modifier.weight(1f)) { Text("Achievements") }
+                OutlinedButton(onClick = onLeaderboards, modifier = Modifier.weight(1f)) { Text("Leaderboards") }
+            }
+        }
 
         if (importState is ImportState.Failed) {
             Spacer(Modifier.height(12.dp))

@@ -18,6 +18,7 @@
 #include "game/pk_world.h"
 #include "gfx/pk_font.h"
 #include "input/pk_input.h"
+#include "platform/pk_play_games.h"
 
 #include <SDL3/SDL.h>
 
@@ -2196,6 +2197,11 @@ void pk_mode_result(pk_game *g)
     g->boss_battle = 0;
     g->battle_result = pk_b.won ? 1 : 2;
     pk_items_sort(g);
-    pk_world_save(g);
+    if (pk_world_save(g)) {
+        int owned = 0;
+        pk_play_games_treasures(g->world.h_444);
+        for (i = 0; i < 4; i++) owned += pk_b.opponent_owned[i];
+        if (pk_b.ranked_pvp) pk_play_games_ranked_result(pk_b.won, owned);
+    }
     pk_game_set_phase(g, 1);
 }

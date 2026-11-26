@@ -131,6 +131,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        PlayGamesBridge.initialize(this)
         // The game (other process) may have created identity.cfg, or files
         // may have been copied over USB meanwhile.
         imei = Identity.imei(this)
@@ -217,6 +218,9 @@ class MainActivity : ComponentActivity() {
                     onRemoveData = { confirmRemove = true },
                     onTestServer = { ServerCheck.check(settings) },
                     onServerSettings = { tab = 2 },
+                    playGamesEnabled = PlayGamesBridge.enabled(),
+                    onAchievements = { PlayGamesBridge.showAchievements(this) },
+                    onLeaderboards = { PlayGamesBridge.showLeaderboards(this) },
                     contentPadding = padding,
                 )
                 1 -> LogScreen(log, onShare = ::shareLog, onClear = AppLog::clear, contentPadding = padding)

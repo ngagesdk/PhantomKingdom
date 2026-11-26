@@ -7,6 +7,7 @@
 #include "game/pk_arena_game.h"
 #include "game/pk_data.h"
 #include "net/pk_identity.h"
+#include "platform/pk_play_games.h"
 
 #include <SDL3/SDL.h>
 
@@ -461,6 +462,7 @@ bool pk_world_load(pk_game *g)
                 g->world.teams[t][12] = 0;
             }
         }
+        pk_play_games_treasures(g->world.h_444);
     }
     return ok;
 }

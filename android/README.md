@@ -110,7 +110,26 @@ AndroidX/Compose, SDL and SDL_net sources).
 `-Ppk.sdlSource=/path/to/SDL` the SDL Java files come from a local SDL
 checkout of the same version instead of the release archive on GitHub.
 
-The debug APK is in `app/build/outputs/apk/debug/`.
+The debug APK is in `app/build/outputs/apk/debug/`. By default all APKs,
+including GitHub releases, omit Google Play Games Services.
+
+## Google Play Games Services
+
+Opt in only for Google Play builds with `-Ppk.playGames=true`, for example
+`./gradlew bundleRelease -Ppk.playGames=true`. Play-enabled debug builds also
+need a Play Console Android credential for their debug signing certificate.
+Add tester accounts to Play Games Services, publish the eight achievements,
+two events and two leaderboards before releasing to everyone, and verify
+sign-in and both boards on a Play-installed build signed by Google Play.
+
+The eight saved boss treasures unlock achievements, including treasures from
+existing saves. Completed PvP battles in the Ranked room on the preset server
+count victories and opponent units that were Owned, not merely Out. Summoned
+units, PvE, Scrimmage, custom servers and encounters without a battle do not
+count. Sign-in is optional; results played while not signed in are not recorded.
+The boards use cumulative Play Games event totals; event updates are batched and
+may take time to appear. Scores are client-reported and are not cheat-proof.
+Play Games sign-in, achievements and leaderboards are not in GitHub APKs.
 
 ## Release signing
 
@@ -126,8 +145,8 @@ The CI workflow writes this file from the repository secrets
 `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`. Without them the release APK
 is unsigned and only the debug APK installs.
 
-For Google Play, build a bundle with `./gradlew bundleRelease` and follow
-[store/PLAY_CONSOLE.md](store/PLAY_CONSOLE.md). Privacy policy:
+For Google Play, build a bundle with `./gradlew bundleRelease -Ppk.playGames=true`
+and follow [store/PLAY_CONSOLE.md](store/PLAY_CONSOLE.md). Privacy policy:
 [PRIVACY.md](PRIVACY.md).
 
 ## Artwork and store assets
