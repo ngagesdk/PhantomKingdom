@@ -1,0 +1,11 @@
+# PhantomKingdom achievements, one title per line.
+# Lines starting with # are ignored. Use \n in a title to force a line break.
+
+Pirates, Plundered
+Down to Earth
+Too Hot to Handle
+History Repossessed
+Desert Oasis
+Branch Manager
+Heavy Metal Victory
+Oblivion? Not Today
