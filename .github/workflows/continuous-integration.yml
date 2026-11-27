@@ -96,7 +96,7 @@ jobs:
             "$STORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > keystore.properties
       - name: Build
         working-directory: android
-        run: bash ./gradlew --no-daemon -Ppk.cmakeVersion="$PK_CMAKE_VERSION" assembleDebug assembleRelease
+        run: bash ./gradlew --no-daemon -Ppk.playGames=false -Ppk.cmakeVersion="$PK_CMAKE_VERSION" assembleDebug assembleRelease
       - name: Collect
         run: |
           mkdir -p dist

@@ -110,14 +110,15 @@ AndroidX/Compose, SDL and SDL_net sources).
 `-Ppk.sdlSource=/path/to/SDL` the SDL Java files come from a local SDL
 checkout of the same version instead of the release archive on GitHub.
 
-The debug APK is in `app/build/outputs/apk/debug/`. By default all APKs,
-including GitHub releases, omit Google Play Games Services.
+The debug APK is in `app/build/outputs/apk/debug/`. Project builds include
+Google Play Games Services by default. To build without it, pass
+`-Ppk.playGames=false`; CI uses this option for its GitHub APKs.
 
 ## Google Play Games Services
 
-Opt in only for Google Play builds with `-Ppk.playGames=true`, for example
-`./gradlew bundleRelease -Ppk.playGames=true`. Play-enabled debug builds also
-need a Play Console Android credential for their debug signing certificate.
+Play Games is enabled by `pk.playGames=true` in `gradle.properties`. Play-enabled
+debug builds also need a Play Console Android credential for their debug signing
+certificate.
 Add tester accounts to Play Games Services, publish the eight achievements,
 two events and two leaderboards before releasing to everyone, and verify
 sign-in and both boards on a Play-installed build signed by Google Play.
@@ -145,8 +146,11 @@ The CI workflow writes this file from the repository secrets
 `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`. Without them the release APK
 is unsigned and only the debug APK installs.
 
-For Google Play, build a bundle with `./gradlew bundleRelease -Ppk.playGames=true`
-and follow [store/PLAY_CONSOLE.md](store/PLAY_CONSOLE.md). Privacy policy:
+For Google Play, build a bundle with `./gradlew bundleRelease` or open the
+`android` project in Android Studio and choose **Build > Generate Signed
+Bundle / APK > Android App Bundle**. Select the upload keystore and the
+`release` build variant. The bundle is in `app/build/outputs/bundle/release/`.
+Follow [store/PLAY_CONSOLE.md](store/PLAY_CONSOLE.md). Privacy policy:
 [PRIVACY.md](PRIVACY.md).
 
 ## Artwork and store assets
