@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(PhantomLink
+project(PhantomKingdom
     VERSION 1.2.0
     DESCRIPTION "Clean-room style C99 reimplementation of the Pocket Kingdom engine (bring your own game data)"
     LANGUAGES C)
@@ -150,21 +150,21 @@ if(ANDROID)
     return()
 endif()
 
-add_executable(PhantomLink src/main.c src/icon.rc)
-target_link_libraries(PhantomLink PRIVATE pkcore)
-pk_set_c99(PhantomLink)
+add_executable(PhantomKingdom src/main.c src/icon.rc)
+target_link_libraries(PhantomKingdom PRIVATE pkcore)
+pk_set_c99(PhantomKingdom)
 if(WIN32)
-    set_target_properties(PhantomLink PROPERTIES WIN32_EXECUTABLE ON)
+    set_target_properties(PhantomKingdom PROPERTIES WIN32_EXECUTABLE ON)
 endif()
 
 # Ship assets/ (the font files) next to the executable.
-add_custom_command(TARGET PhantomLink POST_BUILD
+add_custom_command(TARGET PhantomKingdom POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${CMAKE_CURRENT_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:PhantomLink>/assets"
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:PhantomKingdom>/assets"
     COMMENT "Copying assets")
 
 include(GNUInstallDirs)
-install(TARGETS PhantomLink RUNTIME DESTINATION .)
+install(TARGETS PhantomKingdom RUNTIME DESTINATION .)
 install(DIRECTORY assets/ DESTINATION assets)
 install(FILES README.md LICENSE.md docs/THIRD_PARTY.md DESTINATION .)
 
