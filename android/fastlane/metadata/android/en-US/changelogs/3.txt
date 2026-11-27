@@ -1,0 +1,2 @@
+- Earn achievements for discovering boss loot, and compete on Google Play leaderboards.
+- Open Achievements and Leaderboards from the home screen; Google Play Games sign-in is optional.
