@@ -1,6 +1,7 @@
 # PhantomKingdom achievements, one title per line.
 # Lines starting with # are ignored. Use \n in a title to force a line break.
 
+Pwn the World!
 Pirates, Plundered
 Down to Earth
 Too Hot to Handle

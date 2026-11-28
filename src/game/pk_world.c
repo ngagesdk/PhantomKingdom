@@ -463,6 +463,9 @@ bool pk_world_load(pk_game *g)
             }
         }
         pk_play_games_treasures(g->world.h_444);
+        if (g->world.h_43c > 0 || g->progress > 2) {
+            pk_play_games_online_crest();
+        }
     }
     return ok;
 }

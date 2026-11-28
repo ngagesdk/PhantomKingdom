@@ -49,6 +49,10 @@ public class PocketKingdomActivity extends SDLActivity {
         PlayGamesBridge.treasures(this, mask);
     }
 
+    public void playGamesOnlineCrest() {
+        PlayGamesBridge.onlineCrest(this);
+    }
+
     public void playGamesRankedResult(int won, int owned) {
         PlayGamesBridge.rankedResult(this, won, owned);
     }

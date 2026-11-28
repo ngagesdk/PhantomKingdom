@@ -17,6 +17,7 @@ public final class PlayGamesBridge {
     private static final String EVENT_WINS = "CgkI28-4n5oKEAIQDA";
     private static final String BOARD_OWNED = "CgkI28-4n5oKEAIQDQ";
     private static final String BOARD_WINS = "CgkI28-4n5oKEAIQDg";
+    private static final String ONLINE_CREST = "CgkI28-4n5oKEAIQDw";
     private static final String[] TREASURES = {
         "CgkI28-4n5oKEAIQAQ", "CgkI28-4n5oKEAIQAg", "CgkI28-4n5oKEAIQAw", "CgkI28-4n5oKEAIQBA",
         "CgkI28-4n5oKEAIQBQ", "CgkI28-4n5oKEAIQBg", "CgkI28-4n5oKEAIQBw", "CgkI28-4n5oKEAIQCA"
@@ -29,6 +30,18 @@ public final class PlayGamesBridge {
         activity.runOnUiThread(() -> PlayGames.getGamesSignInClient(activity).isAuthenticated()
             .addOnSuccessListener(auth -> { if (auth.isAuthenticated()) sync(activity); })
             .addOnFailureListener(e -> Log.w(TAG, "Authentication check failed", e)));
+    }
+
+    public static void onlineCrest(Activity activity) {
+        activity.runOnUiThread(() -> PlayGames.getGamesSignInClient(activity).isAuthenticated()
+            .addOnSuccessListener(auth -> {
+                if (!auth.isAuthenticated()) {
+                    Log.i(TAG, "Online Crest achievement sync deferred until sign-in and next save load");
+                    return;
+                }
+                PlayGames.getAchievementsClient(activity).unlockImmediate(ONLINE_CREST)
+                    .addOnFailureListener(e -> Log.w(TAG, "Online Crest unlock failed", e));
+            }).addOnFailureListener(e -> Log.w(TAG, "Online Crest authentication check failed", e)));
     }
 
     public static void treasures(Activity activity, int mask) {

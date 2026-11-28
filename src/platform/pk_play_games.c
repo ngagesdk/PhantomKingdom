@@ -39,9 +39,11 @@ static void send(const char *method, const char *signature, int a, int b)
 }
 
 void pk_play_games_treasures(int mask) { send("playGamesTreasures", "(I)V", mask, 0); }
+void pk_play_games_online_crest(void) { send("playGamesOnlineCrest", "()V", 0, 0); }
 void pk_play_games_ranked_result(int won, int owned) { send("playGamesRankedResult", "(II)V", won, owned); }
 #else
 void pk_play_games_treasures(int mask) { (void)mask; }
+void pk_play_games_online_crest(void) {}
 void pk_play_games_ranked_result(int won, int owned)
 {
     (void)won;

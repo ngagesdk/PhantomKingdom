@@ -2200,6 +2200,9 @@ void pk_mode_result(pk_game *g)
     if (pk_world_save(g)) {
         int owned = 0;
         pk_play_games_treasures(g->world.h_444);
+        if (g->world.h_43c > 0 || g->progress > 2) {
+            pk_play_games_online_crest();
+        }
         for (i = 0; i < 4; i++) {
             owned += pk_b.opponent_owned[i];
         }

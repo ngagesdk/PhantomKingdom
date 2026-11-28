@@ -119,12 +119,14 @@ Google Play Games Services by default. To build without it, pass
 Play Games is enabled by `pk.playGames=true` in `gradle.properties`. Play-enabled
 debug builds also need a Play Console Android credential for their debug signing
 certificate.
-Add tester accounts to Play Games Services, publish the eight achievements,
+Add tester accounts to Play Games Services, publish the nine achievements,
 two events and two leaderboards before releasing to everyone, and verify
 sign-in and both boards on a Play-installed build signed by Google Play.
 
-The eight saved boss treasures unlock achievements, including treasures from
-existing saves. Completed PvP battles in the Ranked room on the preset server
+The eight saved boss treasures and the Online Crest unlock achievements,
+including progress from existing saves. The Online Crest achievement unlocks
+when the save has cleared the game or beaten three area bosses. Completed PvP
+battles in the Ranked room on the preset server
 count victories and opponent units that were Owned, not merely Out. Summoned
 units, PvE, Scrimmage, custom servers and encounters without a battle do not
 count. Sign-in is optional; results played while not signed in are not recorded.
