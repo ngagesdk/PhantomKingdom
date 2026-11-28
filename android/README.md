@@ -130,8 +130,10 @@ battles in the Ranked room on the preset server
 count victories and opponent units that were Owned, not merely Out. Summoned
 units, PvE, Scrimmage, custom servers and encounters without a battle do not
 count. Sign-in is optional; results played while not signed in are not recorded.
-The boards use cumulative Play Games event totals; event updates are batched and
-may take time to appear. Scores are client-reported and are not cheat-proof.
+The boards use cumulative Play Games event totals; event updates are batched by
+Google and may take time to appear. Opening the leaderboards refreshes the
+server totals and submits them before showing the boards; if a recent result is
+still missing, try again later. Scores are client-reported and are not cheat-proof.
 Play Games sign-in, achievements and leaderboards are not in GitHub APKs.
 
 ## Release signing

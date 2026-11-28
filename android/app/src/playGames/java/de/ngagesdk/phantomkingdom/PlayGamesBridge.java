@@ -10,6 +10,11 @@ import android.widget.Toast;
 import com.google.android.gms.games.PlayGames;
 import com.google.android.gms.games.event.Event;
 import com.google.android.gms.games.event.EventBuffer;
+import com.google.android.gms.tasks.Task;
+import com.google.android.gms.tasks.Tasks;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public final class PlayGamesBridge {
     private static final String TAG = "PlayGames";
@@ -28,7 +33,7 @@ public final class PlayGamesBridge {
 
     public static void initialize(Activity activity) {
         activity.runOnUiThread(() -> PlayGames.getGamesSignInClient(activity).isAuthenticated()
-            .addOnSuccessListener(auth -> { if (auth.isAuthenticated()) sync(activity); })
+            .addOnSuccessListener(auth -> { if (auth.isAuthenticated()) syncInBackground(activity); })
             .addOnFailureListener(e -> Log.w(TAG, "Authentication check failed", e)));
     }
 
@@ -70,35 +75,41 @@ public final class PlayGamesBridge {
                 }
                 if (owned > 0) PlayGames.getEventsClient(activity).increment(EVENT_OWNED, owned);
                 if (won != 0) PlayGames.getEventsClient(activity).increment(EVENT_WINS, 1);
-                sync(activity);
-                MAIN.postDelayed(() -> { if (!activity.isFinishing()) sync(activity); }, 30000);
+                Log.i(TAG, "Ranked result queued: won=" + won + ", owned=" + owned);
+                syncInBackground(activity);
+                MAIN.postDelayed(() -> { if (!activity.isFinishing()) syncInBackground(activity); }, 30000);
             }).addOnFailureListener(e -> {
                 Log.w(TAG, "Ranked result authentication check failed", e);
                 Toast.makeText(activity, "Play Games unavailable; this ranked result was not recorded.", Toast.LENGTH_LONG).show();
             }));
     }
 
-    private static void sync(Activity activity) {
-        PlayGames.getEventsClient(activity).loadByIds(false, EVENT_OWNED, EVENT_WINS)
-            .addOnSuccessListener(data -> {
+    private static void syncInBackground(Activity activity) {
+        sync(activity).addOnFailureListener(e -> Log.w(TAG, "Leaderboard sync failed", e));
+    }
+
+    private static Task<Void> sync(Activity activity) {
+        return PlayGames.getEventsClient(activity).loadByIds(true, EVENT_OWNED, EVENT_WINS)
+            .onSuccessTask(data -> {
                 EventBuffer events = data.get();
                 if (events == null) {
-                    Log.w(TAG, "Event data unavailable");
-                    return;
+                    return Tasks.forException(new IllegalStateException("Ranked event data unavailable"));
                 }
+                List<Task<?>> submissions = new ArrayList<>();
                 try {
                     for (Event event : events) {
                         String board = EVENT_OWNED.equals(event.getEventId()) ? BOARD_OWNED
                             : EVENT_WINS.equals(event.getEventId()) ? BOARD_WINS : null;
                         if (board != null && event.getValue() > 0) {
-                            PlayGames.getLeaderboardsClient(activity).submitScoreImmediate(board, event.getValue())
-                                .addOnFailureListener(e -> Log.w(TAG, "Leaderboard submission failed", e));
+                            submissions.add(PlayGames.getLeaderboardsClient(activity)
+                                .submitScoreImmediate(board, event.getValue()));
                         }
                     }
                 } finally {
                     events.release();
                 }
-            }).addOnFailureListener(e -> Log.w(TAG, "Could not load ranked event totals", e));
+                return Tasks.whenAll(submissions);
+            });
     }
 
     public static void showAchievements(Activity activity) { show(activity, true); }
@@ -115,15 +126,22 @@ public final class PlayGamesBridge {
     }
 
     private static void open(Activity activity, boolean achievements) {
-        sync(activity);
         if (achievements) {
             PlayGames.getAchievementsClient(activity).getAchievementsIntent()
                 .addOnSuccessListener(intent -> activity.startActivityForResult(intent, 9003))
                 .addOnFailureListener(e -> showError(activity, e));
         } else {
-            PlayGames.getLeaderboardsClient(activity).getAllLeaderboardsIntent()
-                .addOnSuccessListener(intent -> activity.startActivityForResult(intent, 9004))
-                .addOnFailureListener(e -> showError(activity, e));
+            sync(activity).addOnCompleteListener(result -> {
+                if (!result.isSuccessful()) {
+                    Log.w(TAG, "Leaderboard sync failed", result.getException());
+                    Toast.makeText(activity, "Could not update leaderboard scores. Please try again.", Toast.LENGTH_LONG).show();
+                }
+                if (!activity.isFinishing()) {
+                    PlayGames.getLeaderboardsClient(activity).getAllLeaderboardsIntent()
+                        .addOnSuccessListener(intent -> activity.startActivityForResult(intent, 9004))
+                        .addOnFailureListener(e -> showError(activity, e));
+                }
+            });
         }
     }
 

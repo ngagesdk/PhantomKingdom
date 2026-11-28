@@ -80,8 +80,8 @@ android {
         minSdk = 24
         targetSdk = 36
         // versionCode: whole number, +1 for every published build.
-        versionCode = 3
-        versionName = "1.2.0"
+        versionCode = 4
+        versionName = "1.3.0"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }

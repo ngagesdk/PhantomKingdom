@@ -1,0 +1,1 @@
+- Fixed Google Play leaderboard updates for ranked battles.
